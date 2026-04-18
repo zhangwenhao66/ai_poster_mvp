@@ -7,13 +7,13 @@
     "prepare:templates": "node scripts/prepare-templates.mjs",
     "dev:stop": "node scripts/kill-dev-ports.mjs",
     "predev": "node scripts/kill-dev-ports.mjs",
-    "dev": "wrangler pages dev --port 8788 --proxy 5173 --compatibility-date=2025-04-01 --show-interactive-dev-session=false -- vite --port 5173 --strictPort",
+    "dev": "wrangler pages dev --config wrangler.vite.toml --port 8788 --proxy 5173 --compatibility-date=2025-04-01 --show-interactive-dev-session=false -- vite --port 5173 --strictPort",
     "dev:vite": "vite",
     "build": "npm run prepare:templates && tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "pages:dev": "npm run build && wrangler pages dev dist --compatibility-date=2025-04-01",
-    "cf:pages-deploy": "wrangler pages deploy dist",
-    "pages:deploy": "npm run build && wrangler pages deploy dist --project-name=ai-poster"
+    "cf:pages-deploy": "wrangler pages deploy",
+    "pages:deploy": "npm run build && wrangler pages deploy"
   },
   "dependencies": {
     "react": "^19.1.0",

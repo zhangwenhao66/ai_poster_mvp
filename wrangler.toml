@@ -1,18 +1,10 @@
-# Cloudflare Pages（Git / Workers Builds）说明：
+# Cloudflare Pages（Git / Workers Builds）
 # - 构建命令：npm run build
-# - 构建输出目录：dist
-# - 「部署命令」若界面标为必填，请填下面其一（不要用 npx wrangler deploy，那是 Workers）：
-#     npm run cf:pages-deploy
-#   或：
-#     npx wrangler pages deploy dist
-#   若提示找不到项目，加上与控制台一致的名称，例如：
-#     npx wrangler pages deploy dist --project-name=你的Pages项目名
-# - 机密：Pages 项目设置里添加 Secret「ARK_API_KEY」。
-# - 本机完整构建并上传：npm run pages:deploy
-# - 本地 .dev.vars 放 ARK_API_KEY（勿提交）
+# - 部署命令：npm run cf:pages-deploy（或 npx wrangler pages deploy）
+# - name 须与控制台里 Pages 项目名称一致；不一致时改本字段或加 --project-name
+# - 机密：ARK_API_KEY 在 Pages 变量里配置
+# - 本地联调：npm run dev（使用 wrangler.vite.toml，见 package.json）
 
 name = "ai-poster"
 compatibility_date = "2025-04-01"
-# 不设 pages_build_output_dir，否则 wrangler 4 会把 dist 当作静态目录，
-# 与 `wrangler pages dev -- vite` 的“代理命令”模式冲突（报 Specify either a directory OR a proxy command）。
-# 部署时请在 CLI 显式传目录：`wrangler pages deploy dist`
+pages_build_output_dir = "dist"
