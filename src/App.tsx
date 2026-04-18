@@ -5,6 +5,7 @@ import { buildInitialPrompt, buildModifyPrompt } from "./lib/prompts";
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
+const IMAGE_SIZE = "4K";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 8;
@@ -149,7 +150,7 @@ export function App() {
       const body: Record<string, unknown> = {
         model: MODEL,
         prompt,
-        size: "2K",
+        size: IMAGE_SIZE,
         sequential_image_generation: "disabled",
         output_format: "png",
         response_format: "url",
@@ -186,7 +187,7 @@ export function App() {
         model: MODEL,
         prompt,
         image: resultUrl,
-        size: "2K",
+        size: IMAGE_SIZE,
         sequential_image_generation: "disabled",
         output_format: "png",
         response_format: "url",
@@ -220,26 +221,40 @@ export function App() {
     <div className="shell">
       <div className="topbar">
         <div>
-          <h1 className="title">餐饮老板 · AI 海报 MVP</h1>
+          <h1 className="title">AI 海报 MVP</h1>
           <p className="subtitle">选模板（或智能风格）→ 上传素材 → 填写文案并生成海报</p>
         </div>
-        <div className="pill">Cloudflare Workers · 密钥仅在后端</div>
       </div>
 
-      <div className="steps" aria-label="流程步骤">
-        <div className={`step ${wizardStep === 1 ? "active" : ""}`}>
+      <nav className="steps" aria-label="流程步骤">
+        <button
+          type="button"
+          className={`step ${wizardStep === 1 ? "active" : ""}`}
+          aria-current={wizardStep === 1 ? "step" : undefined}
+          onClick={() => setWizardStep(1)}
+        >
           <strong>1 模板</strong>
           <span>可选模板或智能风格</span>
-        </div>
-        <div className={`step ${wizardStep === 2 ? "active" : ""}`}>
+        </button>
+        <button
+          type="button"
+          className={`step ${wizardStep === 2 ? "active" : ""}`}
+          aria-current={wizardStep === 2 ? "step" : undefined}
+          onClick={() => setWizardStep(2)}
+        >
           <strong>2 素材</strong>
           <span>菜品 / 门店 / 招牌照片</span>
-        </div>
-        <div className={`step ${wizardStep === 3 ? "active" : ""}`}>
+        </button>
+        <button
+          type="button"
+          className={`step ${wizardStep === 3 ? "active" : ""}`}
+          aria-current={wizardStep === 3 ? "step" : undefined}
+          onClick={() => setWizardStep(3)}
+        >
           <strong>3 文案与生成</strong>
           <span>填写内容后点击生成</span>
-        </div>
-      </div>
+        </button>
+      </nav>
 
       {indexError ? <div className="card error">{indexError}</div> : null}
 
@@ -361,10 +376,7 @@ export function App() {
             onChange={(e) => setPosterCopy(e.target.value)}
             placeholder="例如：店名、卖点一句话、活动信息、地址电话（可选）、营业时间等。"
           />
-          <p className="hint">
-            建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。生图模型：<code>{MODEL}</code> ·{" "}
-            <code>2K</code> · <code>png</code>
-          </p>
+          <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。</p>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn ghost" type="button" onClick={() => setWizardStep(2)}>
               上一步
@@ -424,15 +436,6 @@ export function App() {
           </div>
         </div>
       ) : null}
-
-      <p className="footer-note">
-        线上请在 Worker 设置里配置 Secret：<code>ARK_API_KEY</code>。默认访问地址形如{" "}
-        <code>*.workers.dev</code>，中间一段是账户在 Cloudflare 的 <strong>workers.dev 子域</strong>（创建时可能与邮箱有关）。可在{" "}
-        <strong>Workers 和 Pages</strong> 概览页找到「您的子域 / Your subdomain」→ <strong>更改</strong>，改成简短中性名称；或绑定<strong>自有域名</strong>（Workers
-        → 该 Worker → 自定义域），对外即可不暴露该段。本地开发：复制 <code>.dev.vars.example</code> 为 <code>.dev.vars</code>，运行{" "}
-        <code>npm run dev</code> 后打开终端中的 <code>http://localhost:8788</code>。端口冲突可执行 <code>npm run dev:stop</code>。生图若报网络错误，可关闭代理或设置{" "}
-        <code>NO_PROXY=ark.cn-beijing.volces.com,*.volces.com</code>。
-      </p>
     </div>
   );
 }

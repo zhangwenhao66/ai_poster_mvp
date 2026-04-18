@@ -1,4 +1,5 @@
 import { apiGenerateHandler } from "./ark-proxy";
+import { downloadImageProxyHandler } from "./download-proxy";
 
 export interface Env {
   ARK_API_KEY: string;
@@ -10,6 +11,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/api/generate") {
       return apiGenerateHandler(request, env);
+    }
+    if (url.pathname === "/api/download-image") {
+      return downloadImageProxyHandler(request);
     }
     return env.ASSETS.fetch(request);
   },

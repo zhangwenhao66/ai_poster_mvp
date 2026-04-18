@@ -130,7 +130,7 @@ async function handlePost(request: Request, env: { ARK_API_KEY: string }): Promi
   const payload: ArkImagePayload = {
     model,
     prompt: prompt.trim(),
-    size: typeof incoming.size === "string" ? incoming.size : "2K",
+    size: typeof incoming.size === "string" ? incoming.size : "4K",
     sequential_image_generation:
       typeof incoming.sequential_image_generation === "string"
         ? incoming.sequential_image_generation
