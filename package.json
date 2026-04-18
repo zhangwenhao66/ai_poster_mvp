@@ -1,0 +1,30 @@
+{
+  "name": "ai-poster",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prepare:templates": "node scripts/prepare-templates.mjs",
+    "dev:stop": "node scripts/kill-dev-ports.mjs",
+    "predev": "node scripts/kill-dev-ports.mjs",
+    "dev": "wrangler pages dev --port 8788 --proxy 5173 --compatibility-date=2025-04-01 --show-interactive-dev-session=false -- vite --port 5173 --strictPort",
+    "dev:vite": "vite",
+    "build": "npm run prepare:templates && tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "pages:dev": "npm run build && wrangler pages dev dist --compatibility-date=2025-04-01",
+    "pages:deploy": "npm run build && wrangler pages deploy dist --project-name=ai-poster"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250418.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2",
+    "wrangler": "^4.12.0"
+  }
+}

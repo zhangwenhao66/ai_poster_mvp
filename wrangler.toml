@@ -1,0 +1,9 @@
+# Cloudflare Pages: build output is dist/, Functions live in functions/
+# Set secret ARK_API_KEY: wrangler pages secret put ARK_API_KEY --project-name=ai-poster
+# Local dev: create .dev.vars with ARK_API_KEY=... (gitignored)
+
+name = "ai-poster"
+compatibility_date = "2025-04-01"
+# 不设 pages_build_output_dir，否则 wrangler 4 会把 dist 当作静态目录，
+# 与 `wrangler pages dev -- vite` 的“代理命令”模式冲突（报 Specify either a directory OR a proxy command）。
+# 部署时请在 CLI 显式传目录：`wrangler pages deploy dist`
