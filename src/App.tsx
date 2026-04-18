@@ -9,7 +9,7 @@ const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 8;
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3;
 
 function uid(): string {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -221,9 +221,9 @@ export function App() {
       <div className="topbar">
         <div>
           <h1 className="title">餐饮老板 · AI 海报 MVP</h1>
-          <p className="subtitle">选模板（或智能风格）→ 上传素材 → 填写海报文案 → 生成与微调</p>
+          <p className="subtitle">选模板（或智能风格）→ 上传素材 → 填写文案并生成海报</p>
         </div>
-        <div className="pill">Cloudflare Pages · 密钥仅在后端</div>
+        <div className="pill">Cloudflare Workers · 密钥仅在后端</div>
       </div>
 
       <div className="steps" aria-label="流程步骤">
@@ -236,12 +236,8 @@ export function App() {
           <span>菜品 / 门店 / 招牌照片</span>
         </div>
         <div className={`step ${wizardStep === 3 ? "active" : ""}`}>
-          <strong>3 文案</strong>
-          <span>写到海报里的内容</span>
-        </div>
-        <div className={`step ${wizardStep === 4 ? "active" : ""}`}>
-          <strong>4 生成</strong>
-          <span>调用 Seedream 生图</span>
+          <strong>3 文案与生成</strong>
+          <span>填写内容后点击生成</span>
         </div>
       </div>
 
@@ -358,36 +354,27 @@ export function App() {
 
       {wizardStep === 3 ? (
         <section className="card">
-          <h2>第三步：填写要写到海报里的内容</h2>
+          <h2>第三步：填写海报文案并生成</h2>
           <textarea
             className="textarea"
             value={posterCopy}
             onChange={(e) => setPosterCopy(e.target.value)}
             placeholder="例如：店名、卖点一句话、活动信息、地址电话（可选）、营业时间等。"
           />
-          <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。</p>
+          <p className="hint">
+            建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。生图模型：<code>{MODEL}</code> ·{" "}
+            <code>2K</code> · <code>png</code>
+          </p>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn ghost" type="button" onClick={() => setWizardStep(2)}>
               上一步
             </button>
-            <button className="btn primary" type="button" disabled={!canNextFrom3} onClick={() => setWizardStep(4)}>
-              下一步
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {wizardStep === 4 ? (
-        <section className="card">
-          <h2>第四步：生成海报</h2>
-          <div className="hint" style={{ marginBottom: 10 }}>
-            模型：<code>{MODEL}</code> · 输出：<code>2K</code> · <code>png</code>
-          </div>
-          <div className="row">
-            <button className="btn ghost" type="button" onClick={() => setWizardStep(3)}>
-              上一步
-            </button>
-            <button className="btn primary" type="button" disabled={loading} onClick={() => void handleGenerateInitial()}>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={!canNextFrom3 || loading}
+              onClick={() => void handleGenerateInitial()}
+            >
               {loading ? "生成中…" : "生成海报"}
             </button>
           </div>
@@ -439,11 +426,11 @@ export function App() {
       ) : null}
 
       <p className="footer-note">
-        部署到 Cloudflare Pages 后，请在项目设置里配置 Secret：<code>ARK_API_KEY</code>。本地可复制{" "}
-        <code>.dev.vars.example</code> 为 <code>.dev.vars</code> 并填写密钥。<code>npm run dev</code> 会由 wrangler 拉起 Vite：请在浏览器打开终端里{" "}
-        <code>Ready on http://localhost:8788</code> 这一行地址（<code>/api</code> 与此同源）。若你只想跑{" "}
-        <code>npm run dev:vite</code>，则需另开终端执行 <code>npm run pages:dev</code>（或 <code>wrangler pages dev dist --port 8788</code>）再访问 Vite 的{" "}
-        <code>5173</code>。若端口占用，可先执行 <code>npm run dev:stop</code>（<code>npm run dev</code> 前也会自动清理常见端口）。生图若报网络错误，可关闭本机 HTTP 代理或设置{" "}
+        线上请在 Worker 设置里配置 Secret：<code>ARK_API_KEY</code>。默认访问地址形如{" "}
+        <code>*.workers.dev</code>，中间一段是账户在 Cloudflare 的 <strong>workers.dev 子域</strong>（创建时可能与邮箱有关）。可在{" "}
+        <strong>Workers 和 Pages</strong> 概览页找到「您的子域 / Your subdomain」→ <strong>更改</strong>，改成简短中性名称；或绑定<strong>自有域名</strong>（Workers
+        → 该 Worker → 自定义域），对外即可不暴露该段。本地开发：复制 <code>.dev.vars.example</code> 为 <code>.dev.vars</code>，运行{" "}
+        <code>npm run dev</code> 后打开终端中的 <code>http://localhost:8788</code>。端口冲突可执行 <code>npm run dev:stop</code>。生图若报网络错误，可关闭代理或设置{" "}
         <code>NO_PROXY=ark.cn-beijing.volces.com,*.volces.com</code>。
       </p>
     </div>
