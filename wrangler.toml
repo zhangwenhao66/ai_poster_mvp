@@ -1,7 +1,7 @@
 # Cloudflare Pages（Git / Workers Builds）
 # - 构建命令：npm run build
 # - 部署命令：npm run cf:pages-deploy（或 npx wrangler pages deploy）
-# - name 须与控制台里 Pages 项目名称一致；不一致时改本字段或加 --project-name
+# - name 须与控制台 Pages 名称一致（仅 a-z、0-9、连字符；GitHub 仓库可用下划线，Pages 名常不同）。
 # - 机密：ARK_API_KEY 在 Pages 变量里配置
 # - 本地联调：npm run dev（使用 wrangler.vite.toml，见 package.json）
 #
@@ -10,7 +10,6 @@
 #   或至少包含：帐户 → Cloudflare Pages → 编辑；不要用仅 DNS/CDN 的受限令牌。
 #   也可先删掉构建变量里的 CLOUDFLARE_API_TOKEN，改用 Git 集成默认凭据（若界面允许不设部署命令）。
 
-# 须与控制台「Workers 和 Pages → Pages → 该项目」的名称完全一致（常见与 GitHub 仓库名一致）。
-name = "ai_poster_mvp"
+name = "ai-poster"
 compatibility_date = "2025-04-01"
 pages_build_output_dir = "dist"
