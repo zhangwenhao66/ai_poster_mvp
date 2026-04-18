@@ -60,17 +60,32 @@ function walkCategories(root) {
   return { categories };
 }
 
-rmrf(destRoot);
+function hasCommittedTemplates() {
+  if (!fs.existsSync(destRoot)) return false;
+  const entries = fs.readdirSync(destRoot, { withFileTypes: true });
+  return entries.some((e) => e.isDirectory() && !e.name.startsWith("."));
+}
+
 if (!fs.existsSync(srcRoot)) {
+  if (hasCommittedTemplates()) {
+    const index = walkCategories(destRoot);
+    fs.mkdirSync(path.dirname(indexPath), { recursive: true });
+    fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    console.log(
+      `[prepare-templates] No external TEMPLATES_SRC; using templates already in repo (${index.categories.length} categories).`,
+    );
+    process.exit(0);
+  }
   console.warn(
     `[prepare-templates] Source not found: ${srcRoot}\n` +
-      `Set TEMPLATES_SRC or place templates at ../../海报模板/餐饮 relative to project.`,
+      `Set TEMPLATES_SRC, place templates at ../../海报模板/餐饮, or commit files under public/templates/餐饮/.`,
   );
   fs.mkdirSync(path.dirname(indexPath), { recursive: true });
   fs.writeFileSync(indexPath, JSON.stringify({ categories: [] }, null, 2));
   process.exit(0);
 }
 
+rmrf(destRoot);
 copyDir(srcRoot, destRoot);
 const index = walkCategories(destRoot);
 fs.mkdirSync(path.dirname(indexPath), { recursive: true });

@@ -1,6 +1,11 @@
-# Cloudflare Pages: build output is dist/, Functions live in functions/
-# Set secret ARK_API_KEY: wrangler pages secret put ARK_API_KEY --project-name=ai-poster
-# Local dev: create .dev.vars with ARK_API_KEY=... (gitignored)
+# Cloudflare Pages（Git 连接）说明：
+# - 构建命令：npm run build
+# - 构建输出目录：dist
+# - 「部署命令 / Deploy command」请留空，不要填 npx wrangler deploy（那是 Workers，会导致 Missing entry-point）。
+#   Pages 会自动发布 dist，并打包根目录下的 functions/。
+# - 机密：在 Pages 项目设置里添加 Secret「ARK_API_KEY」。
+# - 本机 wrangler 直传：npm run pages:deploy
+# - 本地 .dev.vars 放 ARK_API_KEY（勿提交）
 
 name = "ai-poster"
 compatibility_date = "2025-04-01"
