@@ -1,15 +1,15 @@
-# Cloudflare Pages（Git / Workers Builds）
-# - 构建命令：npm run build
-# - 部署命令：npm run cf:pages-deploy（或 npx wrangler pages deploy）
-# - name 须与控制台 Pages 名称一致（仅 a-z、0-9、连字符；GitHub 仓库可用下划线，Pages 名常不同）。
-# - 机密：ARK_API_KEY 在 Pages 变量里配置
-# - 本地联调：npm run dev（使用 wrangler.vite.toml，见 package.json）
+# 生产（Workers Builds + Git）：部署命令请用  npx wrangler deploy  或  npm run cf:workers-deploy
+# 不要用 wrangler pages deploy —— 那是「Cloudflare Pages」产品 API；Git 连到的是 Worker 时会出现 8000007。
 #
-# CI 若报 Authentication error [10000]：构建环境里的 CLOUDFLARE_API_TOKEN 权限不够或已失效。
-#   在 Cloudflare 控制台「我的个人资料 → API 令牌」新建令牌，模板选「编辑 Cloudflare Workers」，
-#   或至少包含：帐户 → Cloudflare Pages → 编辑；不要用仅 DNS/CDN 的受限令牌。
-#   也可先删掉构建变量里的 CLOUDFLARE_API_TOKEN，改用 Git 集成默认凭据（若界面允许不设部署命令）。
+# 本地 Vite + Pages Functions：npm run dev（wrangler.vite.toml）
+# 本地仅预览构建结果：npm run pages:dev（wrangler.pages.toml）
+#
+# 机密：Worker / Pages 变量里配置 ARK_API_KEY
 
 name = "ai-poster"
+main = "worker/entry.ts"
 compatibility_date = "2025-04-01"
-pages_build_output_dir = "dist"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
