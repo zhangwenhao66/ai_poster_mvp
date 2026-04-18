@@ -10,6 +10,7 @@
 #   或至少包含：帐户 → Cloudflare Pages → 编辑；不要用仅 DNS/CDN 的受限令牌。
 #   也可先删掉构建变量里的 CLOUDFLARE_API_TOKEN，改用 Git 集成默认凭据（若界面允许不设部署命令）。
 
-name = "ai-poster"
+# 须与控制台「Workers 和 Pages → Pages → 该项目」的名称完全一致（常见与 GitHub 仓库名一致）。
+name = "ai_poster_mvp"
 compatibility_date = "2025-04-01"
 pages_build_output_dir = "dist"

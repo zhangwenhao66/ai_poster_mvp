@@ -2,5 +2,5 @@
 # 故意不写 pages_build_output_dir，才能使用 `wrangler pages dev -- vite` 代理模式。
 # CI / 线上部署请使用根目录的 wrangler.toml。
 
-name = "ai-poster"
+name = "ai_poster_mvp"
 compatibility_date = "2025-04-01"
