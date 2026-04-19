@@ -36,6 +36,9 @@ export function App() {
   const [modifyOpen, setModifyOpen] = useState(false);
   const [modifyText, setModifyText] = useState("");
 
+  /** 当前分类下模板列表中的下标；`null` 表示预览弹层关闭 */
+  const [templatePreviewIndex, setTemplatePreviewIndex] = useState<number | null>(null);
+
   const uploadsRef = useRef(uploads);
   uploadsRef.current = uploads;
 
@@ -71,6 +74,38 @@ export function App() {
     return categories.find((c) => c.id === activeCategory) ?? categories[0] ?? null;
   }, [activeCategory, categories]);
 
+  useEffect(() => {
+    setTemplatePreviewIndex(null);
+  }, [activeCategory]);
+
+  useEffect(() => {
+    if (templatePreviewIndex === null || !activeCat) return;
+    const len = activeCat.templates.length;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setTemplatePreviewIndex(null);
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        setTemplatePreviewIndex((i) => (i === null || len <= 0 ? i : Math.max(0, i - 1)));
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        setTemplatePreviewIndex((i) => (i === null || len <= 0 ? i : Math.min(len - 1, i + 1)));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [templatePreviewIndex, activeCat]);
+
+  useEffect(() => {
+    if (templatePreviewIndex === null || !activeCat?.templates.length) return;
+    const max = activeCat.templates.length - 1;
+    if (templatePreviewIndex > max) setTemplatePreviewIndex(max);
+  }, [templatePreviewIndex, activeCat]);
+
   const remainingMods = Math.max(0, MAX_MODIFICATIONS - modifyCount);
   const hasTemplate = Boolean(selectedTemplate) && !smartStyle;
 
@@ -87,6 +122,25 @@ export function App() {
   function onPickTemplate(t: TemplateItem) {
     setSelectedTemplate(t);
     setSmartStyle(false);
+  }
+
+  function openTemplatePreview(t: TemplateItem) {
+    const list = activeCat?.templates ?? [];
+    const idx = list.findIndex((x) => x.id === t.id);
+    setTemplatePreviewIndex(idx >= 0 ? idx : 0);
+  }
+
+  function closeTemplatePreview() {
+    setTemplatePreviewIndex(null);
+  }
+
+  function confirmUseTemplateAndNext() {
+    if (templatePreviewIndex === null || !activeCat) return;
+    const t = activeCat.templates[templatePreviewIndex];
+    if (!t) return;
+    onPickTemplate(t);
+    setTemplatePreviewIndex(null);
+    setWizardStep(2);
   }
 
   function onToggleSmartStyle(next: boolean) {
@@ -301,14 +355,14 @@ export function App() {
                         type="button"
                         className="thumb"
                         aria-selected={selectedTemplate?.id === t.id}
-                        onClick={() => onPickTemplate(t)}
-                        title={t.file}
+                        onClick={() => openTemplatePreview(t)}
+                        title={`预览：${t.file}`}
                       >
                         <img src={t.path} alt="" loading="lazy" />
                       </button>
                     ))}
                   </div>
-                  <p className="hint">点击缩略图选择模板；选中后会高亮显示。</p>
+                  <p className="hint">点击缩略图放大预览，可在预览中切换同分类下的其他模板，再点「使用模板」进入下一步。</p>
                 </>
               )}
             </>
@@ -417,6 +471,78 @@ export function App() {
             <p className="hint">修改会以“当前海报图 + 你的文字编辑指令”再次调用生图接口。</p>
           )}
         </section>
+      ) : null}
+
+      {templatePreviewIndex !== null && activeCat && activeCat.templates.length > 0 ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => closeTemplatePreview()}
+        >
+          <div
+            className="modal template-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-preview-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="template-preview-header">
+              <h3 id="template-preview-title">模板预览</h3>
+              <button
+                type="button"
+                className="template-preview-close"
+                aria-label="关闭预览"
+                onClick={() => closeTemplatePreview()}
+              >
+                ×
+              </button>
+            </div>
+            <p className="template-preview-counter" aria-live="polite">
+              {activeCat.name} · {templatePreviewIndex + 1} / {activeCat.templates.length}
+            </p>
+            <button
+              type="button"
+              className="btn template-nav-btn"
+              disabled={templatePreviewIndex <= 0}
+              onClick={() =>
+                setTemplatePreviewIndex((i) => (i === null ? i : Math.max(0, i - 1)))
+              }
+            >
+              上一张
+            </button>
+            <div className="template-preview-image-wrap">
+              <img
+                src={activeCat.templates[templatePreviewIndex]?.path}
+                alt=""
+                decoding="async"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn template-nav-btn"
+              disabled={templatePreviewIndex >= activeCat.templates.length - 1}
+              onClick={() =>
+                setTemplatePreviewIndex((i) =>
+                  i === null ? i : Math.min(activeCat.templates.length - 1, i + 1),
+                )
+              }
+            >
+              下一张
+            </button>
+            <p className="hint template-preview-filename">
+              {activeCat.templates[templatePreviewIndex]?.file}
+            </p>
+            <div className="row template-preview-actions">
+              <button className="btn ghost" type="button" onClick={() => closeTemplatePreview()}>
+                取消
+              </button>
+              <button className="btn primary" type="button" onClick={() => confirmUseTemplateAndNext()}>
+                使用模板
+              </button>
+            </div>
+            <p className="hint template-preview-keys">提示：可用键盘 ↑ ↓ 或 ← → 切换。</p>
+          </div>
+        </div>
       ) : null}
 
       {modifyOpen ? (
