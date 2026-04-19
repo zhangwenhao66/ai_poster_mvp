@@ -415,8 +415,8 @@ export function App() {
           <h1 className="title">AI 门店视觉</h1>
           <p className="subtitle">
             {activeFeature === "poster"
-              ? "选模板（或智能风格）→ 上传素材 → 填写文案并生成海报"
-              : "上传菜品原图即可；即使略模糊也会尽量输出影棚级超清成片，适合线上菜单与宣传"}
+              ? "选模板（或智能风格）→ 上传素材 → 填写文案；成稿中的商品/门店应与素材一致"
+              : "盘中食物保持与原图一致（仅更清晰），背景与台面可重做，适合菜单与宣传"}
           </p>
         </div>
       </div>
@@ -570,7 +570,7 @@ export function App() {
               </div>
             ) : (
               <p className="hint" style={{ marginTop: 10 }}>
-                例如：招牌菜特写、门店外观、灯箱招牌、菜单亮点等。
+                例如：招牌菜特写、门店外观、灯箱招牌、菜单亮点等。生成时会尽量保持画面里的菜品、饮品、门面与您上传的图为「同一商品/同一家店」，而不会换成别的商品示意图。
               </p>
             )}
           </div>
@@ -594,7 +594,7 @@ export function App() {
             onChange={(e) => setPosterCopy(e.target.value)}
             placeholder="例如：店名、卖点一句话、活动信息、地址电话（可选）、营业时间等。"
           />
-          <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。</p>
+          <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。系统已强调素材保真：若成稿与实物仍有偏差，可尝试换更清晰的素材或减少一张图里的主体数量。</p>
           <div className="model-picker">
             <label className="model-picker-label" htmlFor="image-model-poster">
               生成模型
@@ -629,7 +629,7 @@ export function App() {
         <section className="card dish-feature">
           <h2>AI 菜品图（菜单 / 外卖展示）</h2>
           <p className="hint">
-            上传<strong>一张</strong>菜品照片即可（手机随手拍、略模糊也可）。系统会<strong>完整替换背景与台面</strong>、重做光影与色彩，并在保留「仍是同一道菜」的前提下，尽量把菜品细节补全到<strong>商业摄影棚级的高清清晰</strong>，成片适合线上菜单、外卖主图与宣传物料。
+            上传<strong>一张</strong>菜品照片即可（手机随手拍、略模糊也可）。<strong>盘中食物须与原图是同一盘菜</strong>（形状与细节保持一致，只做去糊与高清化），<strong>不会把菜换成另一种东西</strong>。系统会<strong>重做背景、台面与盘外搭配</strong>、并重做光影；成片适合线上菜单、外卖主图与宣传。
           </p>
           <div className="drop dish-drop">
             <div className="row">
@@ -652,7 +652,7 @@ export function App() {
               </div>
             ) : (
               <p className="hint" style={{ marginTop: 10 }}>
-                建议尽量对焦主体；即便原图偏糊，生成时也会朝超清影棚效果优化（仍以你这道菜为准）。
+                建议尽量对焦主体；偏糊时会对食物区域做清晰化，但不会改食材与摆盘细节。
               </p>
             )}
           </div>
@@ -704,9 +704,9 @@ export function App() {
           {remainingMods <= 0 ? (
             <p className="hint">已达到最多 {MAX_MODIFICATIONS} 次修改上限；仍可下载当前图片。</p>
           ) : activeFeature === "dish" ? (
-            <p className="hint">修改会以「当前菜品图 + 你的文字说明」再次调用生图；尽量描述光影、背景或色彩上的调整。</p>
+            <p className="hint">修改会以「当前菜品图 + 你的文字说明」再次调用生图；可描述背景、台面、光影；盘中食物仅会更清晰，不应被要求改成别的菜。</p>
           ) : (
-            <p className="hint">修改会以“当前海报图 + 你的文字编辑指令”再次调用生图接口。</p>
+            <p className="hint">修改会以「当前海报图 + 你的文字编辑指令」再次调用生图；请尽量描述版式、字色、装饰或氛围，避免要求「换成另一道菜/另一家店」（系统会保持与用户素材一致的商品与门店）。</p>
           )}
         </section>
       ) : null}
@@ -802,8 +802,8 @@ export function App() {
             <h3>描述你要修改的内容</h3>
             <p className="hint">
               {activeFeature === "dish"
-                ? "说明希望如何微调光影、背景、色彩或质感（尽量具体）；系统将尽量保持菜品造型不变。"
-                : "用自然语言说明「把什么改成什么」或希望调整的区域与风格。"}
+                ? "可说明背景、台面、盘外道具或整体光影（尽量具体）。盘中食物将保持同一道菜，仅做清晰化，勿要求换成别的食材或另一道菜。"
+                : "用自然语言说明版式、配色、文字或装饰上的调整；请勿要求把画面中的商品或门店改成与上传素材不符的另一件东西。"}
             </p>
             <textarea className="textarea" value={modifyText} onChange={(e) => setModifyText(e.target.value)} />
             <div className="row" style={{ marginTop: 10 }}>
