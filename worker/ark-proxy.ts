@@ -1,3 +1,5 @@
+import { SEEDREAM_ALLOWED_SIZES } from "./aspect-constants";
+
 const ARK_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations";
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
 
@@ -127,10 +129,30 @@ async function handlePost(request: Request, env: { ARK_API_KEY: string }): Promi
       ? incoming.model.trim()
       : "doubao-seedream-5-0-260128";
 
+  let sizeStr: string;
+  if (typeof incoming.size === "string" && incoming.size.trim()) {
+    const s = incoming.size.trim();
+    if (s === "2k" || s === "3k") {
+      sizeStr = s;
+    } else if (/^\d+x\d+$/.test(s)) {
+      if (!SEEDREAM_ALLOWED_SIZES.has(s)) {
+        return jsonResponse(
+          { error: `size 不在允许列表内（须为 2k/3k 或与前端一致的 WxH，如 2592x3456）` },
+          400,
+        );
+      }
+      sizeStr = s;
+    } else {
+      return jsonResponse({ error: "size 格式无效（须为 2k、3k 或 WxH 像素）" }, 400);
+    }
+  } else {
+    sizeStr = "3k";
+  }
+
   const payload: ArkImagePayload = {
     model,
     prompt: prompt.trim(),
-    size: typeof incoming.size === "string" ? incoming.size : "3k",
+    size: sizeStr,
     sequential_image_generation:
       typeof incoming.sequential_image_generation === "string"
         ? incoming.sequential_image_generation

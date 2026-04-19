@@ -3,6 +3,8 @@
  * 文档：https://docs.toapis.com — 先上传图片再图生图，生成任务异步轮询。
  */
 
+import { TOAPIS_ALLOWED_ASPECTS } from "./aspect-constants";
+
 const TOAPIS_ORIGIN = "https://toapis.com";
 const NANO_MODEL = "gemini-3.1-flash-image-preview";
 const POLL_INTERVAL_MS = 2000;
@@ -221,10 +223,14 @@ export async function apiToapisGenerateHandler(
     return jsonResponse({ error: "prompt too long" }, 400);
   }
 
-  const aspect =
+  const aspectRaw =
     typeof incoming.aspect === "string" && incoming.aspect.trim()
       ? incoming.aspect.trim()
       : "3:4";
+  if (!TOAPIS_ALLOWED_ASPECTS.has(aspectRaw)) {
+    return jsonResponse({ error: `aspect 不在允许列表内（须为两模型共用的比例之一）` }, 400);
+  }
+  const aspect = aspectRaw;
 
   const resolution =
     typeof incoming.resolution === "string" && incoming.resolution.trim()

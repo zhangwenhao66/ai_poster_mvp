@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { callArkGenerate, callToapisGenerate, firstImageUrl } from "./api/ark";
 import { downloadImage, fetchUrlAsDataUrl, fileToDataUrl } from "./lib/images";
+import {
+  DEFAULT_ASPECT_RATIO,
+  IMAGE_ASPECT_OPTIONS,
+  seedreamSizeForAspect,
+  type SharedAspectRatio,
+} from "./lib/image-aspect";
 import { buildDishPhotoPrompt, buildInitialPrompt, buildModifyPrompt } from "./lib/prompts";
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
-/** 方舟图生接口仅支持 `2k`、`3k` 或 WIDTHxHEIGHT，不支持 4K */
-const IMAGE_SIZE = "3k";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 8;
@@ -47,6 +51,8 @@ export function App() {
   const [dishUpload, setDishUpload] = useState<{ file: File; previewUrl: string } | null>(null);
 
   const [imageModel, setImageModel] = useState<ImageModelId>("seedream");
+  /** 两模型共用的画幅比例；模型1 传对应 WxH，模型2 传比例 + 2K */
+  const [imageAspect, setImageAspect] = useState<SharedAspectRatio>(DEFAULT_ASPECT_RATIO);
   /** 当前结果图是用哪条链路生成的，修改时必须一致 */
   const [lastGenerateModel, setLastGenerateModel] = useState<ImageModelId | null>(null);
 
@@ -186,7 +192,7 @@ export function App() {
       if (imageModel === "nano") {
         const resp = await callToapisGenerate({
           prompt,
-          aspect: "4:5",
+          aspect: imageAspect,
           resolution: "2K",
           image,
         });
@@ -199,7 +205,7 @@ export function App() {
           model: MODEL,
           prompt,
           image,
-          size: IMAGE_SIZE,
+          size: seedreamSizeForAspect(imageAspect),
           sequential_image_generation: "disabled",
           output_format: "png",
           response_format: "url",
@@ -305,7 +311,7 @@ export function App() {
       if (imageModel === "nano") {
         const resp = await callToapisGenerate({
           prompt,
-          aspect: "3:4",
+          aspect: imageAspect,
           resolution: "2K",
           image:
             imageArr.length === 0
@@ -322,7 +328,7 @@ export function App() {
         const body: Record<string, unknown> = {
           model: MODEL,
           prompt,
-          size: IMAGE_SIZE,
+          size: seedreamSizeForAspect(imageAspect),
           sequential_image_generation: "disabled",
           output_format: "png",
           response_format: "url",
@@ -362,7 +368,7 @@ export function App() {
       if (modelForModify === "nano") {
         const resp = await callToapisGenerate({
           prompt,
-          aspect: activeFeature === "dish" ? "4:5" : "3:4",
+          aspect: imageAspect,
           resolution: "2K",
           image: resultUrl,
         });
@@ -374,7 +380,7 @@ export function App() {
           model: MODEL,
           prompt,
           image: resultUrl,
-          size: IMAGE_SIZE,
+          size: seedreamSizeForAspect(imageAspect),
           sequential_image_generation: "disabled",
           output_format: "png",
           response_format: "url",
@@ -609,6 +615,26 @@ export function App() {
               <option value="nano">模型2</option>
             </select>
           </div>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="image-aspect-poster">
+              画幅比例
+            </label>
+            <select
+              id="image-aspect-poster"
+              className="model-picker-select"
+              value={imageAspect}
+              onChange={(e) => setImageAspect(e.target.value as SharedAspectRatio)}
+            >
+              {IMAGE_ASPECT_OPTIONS.map((o) => (
+                <option key={o.ratio} value={o.ratio}>
+                  {o.label}（模型1 {o.seedreamSize}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="hint" style={{ marginTop: 6 }}>
+            选项为两模型均支持的比例交集；模型1 按上列像素出图，模型2 为同比例 + 2K。
+          </p>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn ghost" type="button" onClick={() => setWizardStep(2)}>
               上一步
@@ -670,6 +696,26 @@ export function App() {
               <option value="nano">模型2</option>
             </select>
           </div>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="image-aspect-dish">
+              画幅比例
+            </label>
+            <select
+              id="image-aspect-dish"
+              className="model-picker-select"
+              value={imageAspect}
+              onChange={(e) => setImageAspect(e.target.value as SharedAspectRatio)}
+            >
+              {IMAGE_ASPECT_OPTIONS.map((o) => (
+                <option key={o.ratio} value={o.ratio}>
+                  {o.label}（模型1 {o.seedreamSize}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="hint" style={{ marginTop: 6 }}>
+            选项为两模型均支持的比例交集；模型1 按上列像素出图，模型2 为同比例 + 2K。
+          </p>
           <div className="row" style={{ marginTop: 14 }}>
             <button
               className="btn primary"
