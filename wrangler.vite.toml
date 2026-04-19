@@ -1,6 +1,0 @@
-# 仅用于本地 `npm run dev`（wrangler 拉起 Vite）。
-# 故意不写 pages_build_output_dir，才能使用 `wrangler pages dev -- vite` 代理模式。
-# 线上 Worker 部署用根目录 wrangler.toml（wrangler deploy）；Pages 预览用 wrangler.pages.toml。
-
-name = "ai-poster"
-compatibility_date = "2025-04-01"

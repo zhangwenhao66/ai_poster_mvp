@@ -20,13 +20,7 @@ function pickErrorMessage(text: string, json: unknown): string {
   return trimmed || "生成失败";
 }
 
-export async function callArkGenerate(payload: Record<string, unknown>): Promise<ArkGenerateResponse> {
-  const res = await fetch("/api/generate", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
+async function parseGenerateResponse(res: Response): Promise<ArkGenerateResponse> {
   const text = await res.text();
   let json: unknown = null;
   try {
@@ -40,6 +34,30 @@ export async function callArkGenerate(payload: Record<string, unknown>): Promise
   }
 
   return (json || {}) as ArkGenerateResponse;
+}
+
+export async function callArkGenerate(payload: Record<string, unknown>): Promise<ArkGenerateResponse> {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseGenerateResponse(res);
+}
+
+/** ToAPIs Nano banana 2（gemini-3.1-flash-image-preview），异步任务由 Worker 轮询完成后返回与方舟一致的 data[0].url */
+export async function callToapisGenerate(payload: {
+  prompt: string;
+  aspect?: string;
+  resolution?: string;
+  image?: string | string[];
+}): Promise<ArkGenerateResponse> {
+  const res = await fetch("/api/generate-toapis", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseGenerateResponse(res);
 }
 
 export function firstImageUrl(resp: ArkGenerateResponse): string | null {

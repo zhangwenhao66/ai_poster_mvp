@@ -9,6 +9,7 @@ const ALLOWED_HOST_SUFFIXES = [
   ".byted.org",
   ".bytedance.net",
   ".pstatp.com",
+  ".toapis.com",
 ];
 
 function isPrivateOrBlockedHost(hostname: string): boolean {

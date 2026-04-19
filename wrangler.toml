@@ -1,15 +1,6 @@
-# 生产（Workers Builds + Git）：部署命令请用  npx wrangler deploy  或  npm run cf:workers-deploy
-# 不要用 wrangler pages deploy —— 那是「Cloudflare Pages」产品 API；Git 连到的是 Worker 时会出现 8000007。
-#
-# 本地 Vite + Pages Functions：npm run dev（wrangler.vite.toml）
-# 本地仅预览构建结果：npm run pages:dev（wrangler.pages.toml）
-#
-# 机密：Worker / Pages 变量里配置 ARK_API_KEY
+# 默认配置：供 `wrangler pages dev`（含 `npm run dev`）读取。
+# Wrangler 4+ 不支持 `--config` 自定义路径；且「代理 Vite」时不要写 pages_build_output_dir，否则会与目录模式冲突。
+# 生产 Worker：wrangler.deploy.toml
 
 name = "ai-poster"
-main = "worker/entry.ts"
 compatibility_date = "2025-04-01"
-
-[assets]
-directory = "./dist"
-binding = "ASSETS"

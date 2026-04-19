@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { callArkGenerate, firstImageUrl } from "./api/ark";
+import { callArkGenerate, callToapisGenerate, firstImageUrl } from "./api/ark";
 import { downloadImage, fetchUrlAsDataUrl, fileToDataUrl } from "./lib/images";
-import { buildInitialPrompt, buildModifyPrompt } from "./lib/prompts";
+import { buildDishPhotoPrompt, buildInitialPrompt, buildModifyPrompt } from "./lib/prompts";
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
-const IMAGE_SIZE = "4K";
+/** 方舟图生接口仅支持 `2k`、`3k` 或 WIDTHxHEIGHT，不支持 4K */
+const IMAGE_SIZE = "3k";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 8;
 
 type WizardStep = 1 | 2 | 3;
+type FeatureTab = "poster" | "dish";
+/** 模型1：火山 Seedream；模型2：ToAPIs 图生图 */
+type ImageModelId = "seedream" | "nano";
 
 function uid(): string {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -39,8 +43,17 @@ export function App() {
   /** 当前分类下模板列表中的下标；`null` 表示预览弹层关闭 */
   const [templatePreviewIndex, setTemplatePreviewIndex] = useState<number | null>(null);
 
+  const [activeFeature, setActiveFeature] = useState<FeatureTab>("poster");
+  const [dishUpload, setDishUpload] = useState<{ file: File; previewUrl: string } | null>(null);
+
+  const [imageModel, setImageModel] = useState<ImageModelId>("seedream");
+  /** 当前结果图是用哪条链路生成的，修改时必须一致 */
+  const [lastGenerateModel, setLastGenerateModel] = useState<ImageModelId | null>(null);
+
   const uploadsRef = useRef(uploads);
   uploadsRef.current = uploads;
+  const dishUploadRef = useRef(dishUpload);
+  dishUploadRef.current = dishUpload;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +78,13 @@ export function App() {
   useEffect(() => {
     return () => {
       for (const u of uploadsRef.current) URL.revokeObjectURL(u.previewUrl);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const d = dishUploadRef.current;
+      if (d?.previewUrl) URL.revokeObjectURL(d.previewUrl);
     };
   }, []);
 
@@ -117,6 +137,86 @@ export function App() {
     setError(null);
     setResultUrl(null);
     setModifyCount(0);
+    setLastGenerateModel(null);
+  }
+
+  function switchFeature(next: FeatureTab) {
+    setActiveFeature(next);
+    setError(null);
+    setResultUrl(null);
+    setModifyCount(0);
+    setLastGenerateModel(null);
+    setModifyOpen(false);
+    setModifyText("");
+  }
+
+  function onDishFile(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("请上传一张图片文件。");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(`单张图片过大（>${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB），请压缩后再试。`);
+      return;
+    }
+    setDishUpload((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return { file, previewUrl: URL.createObjectURL(file) };
+    });
+    setError(null);
+  }
+
+  function clearDishUpload() {
+    setDishUpload((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
+
+  async function handleDishGenerate() {
+    if (!dishUpload) return;
+    resetOutputs();
+    setLoading(true);
+    setError(null);
+    try {
+      const prompt = buildDishPhotoPrompt();
+      const image = await fileToDataUrl(dishUpload.file);
+      if (imageModel === "nano") {
+        const resp = await callToapisGenerate({
+          prompt,
+          aspect: "4:5",
+          resolution: "2K",
+          image,
+        });
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+        setLastGenerateModel("nano");
+      } else {
+        const body: Record<string, unknown> = {
+          model: MODEL,
+          prompt,
+          image,
+          size: IMAGE_SIZE,
+          sequential_image_generation: "disabled",
+          output_format: "png",
+          response_format: "url",
+          stream: false,
+          watermark: false,
+        };
+        const resp = await callArkGenerate(body);
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+        setLastGenerateModel("seedream");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function onPickTemplate(t: TemplateItem) {
@@ -201,22 +301,42 @@ export function App() {
         hasTemplate,
       });
       const imageArr = await buildReferenceImagesForInitial();
-      const body: Record<string, unknown> = {
-        model: MODEL,
-        prompt,
-        size: IMAGE_SIZE,
-        sequential_image_generation: "disabled",
-        output_format: "png",
-        response_format: "url",
-        stream: false,
-        watermark: false,
-      };
-      if (imageArr.length > 0) body.image = imageArr.length === 1 ? imageArr[0] : imageArr;
 
-      const resp = await callArkGenerate(body);
-      const url = firstImageUrl(resp);
-      if (!url) throw new Error("接口未返回图片 URL");
-      setResultUrl(url);
+      if (imageModel === "nano") {
+        const resp = await callToapisGenerate({
+          prompt,
+          aspect: "3:4",
+          resolution: "2K",
+          image:
+            imageArr.length === 0
+              ? undefined
+              : imageArr.length === 1
+                ? imageArr[0]
+                : imageArr,
+        });
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+        setLastGenerateModel("nano");
+      } else {
+        const body: Record<string, unknown> = {
+          model: MODEL,
+          prompt,
+          size: IMAGE_SIZE,
+          sequential_image_generation: "disabled",
+          output_format: "png",
+          response_format: "url",
+          stream: false,
+          watermark: false,
+        };
+        if (imageArr.length > 0) body.image = imageArr.length === 1 ? imageArr[0] : imageArr;
+
+        const resp = await callArkGenerate(body);
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+        setLastGenerateModel("seedream");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
@@ -236,21 +356,35 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const prompt = buildModifyPrompt(instruction);
-      const resp = await callArkGenerate({
-        model: MODEL,
-        prompt,
-        image: resultUrl,
-        size: IMAGE_SIZE,
-        sequential_image_generation: "disabled",
-        output_format: "png",
-        response_format: "url",
-        stream: false,
-        watermark: false,
-      });
-      const url = firstImageUrl(resp);
-      if (!url) throw new Error("接口未返回图片 URL");
-      setResultUrl(url);
+      const prompt = buildModifyPrompt(instruction, activeFeature === "dish" ? "dish" : "poster");
+      const modelForModify = lastGenerateModel ?? imageModel;
+
+      if (modelForModify === "nano") {
+        const resp = await callToapisGenerate({
+          prompt,
+          aspect: activeFeature === "dish" ? "4:5" : "3:4",
+          resolution: "2K",
+          image: resultUrl,
+        });
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+      } else {
+        const resp = await callArkGenerate({
+          model: MODEL,
+          prompt,
+          image: resultUrl,
+          size: IMAGE_SIZE,
+          sequential_image_generation: "disabled",
+          output_format: "png",
+          response_format: "url",
+          stream: false,
+          watermark: false,
+        });
+        const url = firstImageUrl(resp);
+        if (!url) throw new Error("接口未返回图片 URL");
+        setResultUrl(url);
+      }
       setModifyCount((c) => c + 1);
       setModifyOpen(false);
       setModifyText("");
@@ -265,7 +399,10 @@ export function App() {
     if (!resultUrl) return;
     setError(null);
     try {
-      await downloadImage(resultUrl, `ai-poster-${Date.now()}.png`);
+      await downloadImage(
+        resultUrl,
+        activeFeature === "dish" ? `ai-dish-${Date.now()}.png` : `ai-poster-${Date.now()}.png`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "下载失败：可尝试右键图片另存为");
     }
@@ -275,12 +412,38 @@ export function App() {
     <div className="shell">
       <div className="topbar">
         <div>
-          <h1 className="title">AI 海报 MVP</h1>
-          <p className="subtitle">选模板（或智能风格）→ 上传素材 → 填写文案并生成海报</p>
+          <h1 className="title">AI 门店视觉</h1>
+          <p className="subtitle">
+            {activeFeature === "poster"
+              ? "选模板（或智能风格）→ 上传素材 → 填写文案并生成海报"
+              : "上传菜品原图即可；即使略模糊也会尽量输出影棚级超清成片，适合线上菜单与宣传"}
+          </p>
         </div>
       </div>
 
-      <nav className="steps" aria-label="流程步骤">
+      <div className="feature-tabs" role="tablist" aria-label="功能切换">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeFeature === "poster"}
+          className={`feature-tab ${activeFeature === "poster" ? "active" : ""}`}
+          onClick={() => switchFeature("poster")}
+        >
+          AI 海报
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeFeature === "dish"}
+          className={`feature-tab ${activeFeature === "dish" ? "active" : ""}`}
+          onClick={() => switchFeature("dish")}
+        >
+          AI 菜品图
+        </button>
+      </div>
+
+      {activeFeature === "poster" ? (
+        <nav className="steps" aria-label="流程步骤">
         <button
           type="button"
           className={`step ${wizardStep === 1 ? "active" : ""}`}
@@ -309,10 +472,11 @@ export function App() {
           <span>填写内容后点击生成</span>
         </button>
       </nav>
+      ) : null}
 
-      {indexError ? <div className="card error">{indexError}</div> : null}
+      {activeFeature === "poster" && indexError ? <div className="card error">{indexError}</div> : null}
 
-      {wizardStep === 1 ? (
+      {activeFeature === "poster" && wizardStep === 1 ? (
         <section className="card">
           <h2>第一步：选择模板（或智能风格）</h2>
           <div className="checkbox">
@@ -378,7 +542,7 @@ export function App() {
         </section>
       ) : null}
 
-      {wizardStep === 2 ? (
+      {activeFeature === "poster" && wizardStep === 2 ? (
         <section className="card">
           <h2>第二步：上传要放进海报的图片</h2>
           <div className="drop">
@@ -421,7 +585,7 @@ export function App() {
         </section>
       ) : null}
 
-      {wizardStep === 3 ? (
+      {activeFeature === "poster" && wizardStep === 3 ? (
         <section className="card">
           <h2>第三步：填写海报文案并生成</h2>
           <textarea
@@ -431,6 +595,20 @@ export function App() {
             placeholder="例如：店名、卖点一句话、活动信息、地址电话（可选）、营业时间等。"
           />
           <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。</p>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="image-model-poster">
+              生成模型
+            </label>
+            <select
+              id="image-model-poster"
+              className="model-picker-select"
+              value={imageModel}
+              onChange={(e) => setImageModel(e.target.value as ImageModelId)}
+            >
+              <option value="seedream">模型1</option>
+              <option value="nano">模型2</option>
+            </select>
+          </div>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn ghost" type="button" onClick={() => setWizardStep(2)}>
               上一步
@@ -447,6 +625,64 @@ export function App() {
         </section>
       ) : null}
 
+      {activeFeature === "dish" ? (
+        <section className="card dish-feature">
+          <h2>AI 菜品图（菜单 / 外卖展示）</h2>
+          <p className="hint">
+            上传<strong>一张</strong>菜品照片即可（手机随手拍、略模糊也可）。系统会<strong>完整替换背景与台面</strong>、重做光影与色彩，并在保留「仍是同一道菜」的前提下，尽量把菜品细节补全到<strong>商业摄影棚级的高清清晰</strong>，成片适合线上菜单、外卖主图与宣传物料。
+          </p>
+          <div className="drop dish-drop">
+            <div className="row">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  onDishFile(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <span className="hint">单张，&lt; {Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB</span>
+            </div>
+            {dishUpload ? (
+              <div className="dish-preview-wrap">
+                <img src={dishUpload.previewUrl} alt="菜品原图预览" className="dish-preview-img" />
+                <button type="button" className="btn ghost" onClick={() => clearDishUpload()}>
+                  重新选择图片
+                </button>
+              </div>
+            ) : (
+              <p className="hint" style={{ marginTop: 10 }}>
+                建议尽量对焦主体；即便原图偏糊，生成时也会朝超清影棚效果优化（仍以你这道菜为准）。
+              </p>
+            )}
+          </div>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="image-model-dish">
+              生成模型
+            </label>
+            <select
+              id="image-model-dish"
+              className="model-picker-select"
+              value={imageModel}
+              onChange={(e) => setImageModel(e.target.value as ImageModelId)}
+            >
+              <option value="seedream">模型1</option>
+              <option value="nano">模型2</option>
+            </select>
+          </div>
+          <div className="row" style={{ marginTop: 14 }}>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={!dishUpload || loading}
+              onClick={() => void handleDishGenerate()}
+            >
+              {loading ? "生成中…" : "生成菜品图"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {error ? (
         <div className="card error" role="alert">
           {error}
@@ -456,7 +692,7 @@ export function App() {
       {resultUrl ? (
         <section className="card result">
           <h2>生成结果</h2>
-          <img src={resultUrl} alt="AI 生成海报" />
+          <img src={resultUrl} alt={activeFeature === "dish" ? "AI 菜品图" : "AI 生成海报"} />
           <div className="row">
             <button className="btn secondary" type="button" disabled={loading || remainingMods <= 0} onClick={() => setModifyOpen(true)}>
               修改（剩余 {remainingMods} 次）
@@ -467,20 +703,25 @@ export function App() {
           </div>
           {remainingMods <= 0 ? (
             <p className="hint">已达到最多 {MAX_MODIFICATIONS} 次修改上限；仍可下载当前图片。</p>
+          ) : activeFeature === "dish" ? (
+            <p className="hint">修改会以「当前菜品图 + 你的文字说明」再次调用生图；尽量描述光影、背景或色彩上的调整。</p>
           ) : (
             <p className="hint">修改会以“当前海报图 + 你的文字编辑指令”再次调用生图接口。</p>
           )}
         </section>
       ) : null}
 
-      {templatePreviewIndex !== null && activeCat && activeCat.templates.length > 0 ? (
+      {activeFeature === "poster" &&
+      templatePreviewIndex !== null &&
+      activeCat &&
+      activeCat.templates.length > 0 ? (
         <div
-          className="modal-backdrop"
+          className="template-preview-backdrop"
           role="presentation"
           onMouseDown={() => closeTemplatePreview()}
         >
           <div
-            className="modal template-preview-modal"
+            className="template-preview-shell"
             role="dialog"
             aria-modal="true"
             aria-labelledby="template-preview-title"
@@ -500,47 +741,57 @@ export function App() {
             <p className="template-preview-counter" aria-live="polite">
               {activeCat.name} · {templatePreviewIndex + 1} / {activeCat.templates.length}
             </p>
-            <button
-              type="button"
-              className="btn template-nav-btn"
-              disabled={templatePreviewIndex <= 0}
-              onClick={() =>
-                setTemplatePreviewIndex((i) => (i === null ? i : Math.max(0, i - 1)))
-              }
-            >
-              上一张
-            </button>
-            <div className="template-preview-image-wrap">
-              <img
-                src={activeCat.templates[templatePreviewIndex]?.path}
-                alt=""
-                decoding="async"
-              />
-            </div>
-            <button
-              type="button"
-              className="btn template-nav-btn"
-              disabled={templatePreviewIndex >= activeCat.templates.length - 1}
-              onClick={() =>
-                setTemplatePreviewIndex((i) =>
-                  i === null ? i : Math.min(activeCat.templates.length - 1, i + 1),
-                )
-              }
-            >
-              下一张
-            </button>
-            <p className="hint template-preview-filename">
-              {activeCat.templates[templatePreviewIndex]?.file}
-            </p>
-            <div className="row template-preview-actions">
-              <button className="btn ghost" type="button" onClick={() => closeTemplatePreview()}>
-                取消
+            <div className="template-preview-stage">
+              <button
+                type="button"
+                className="template-preview-nav"
+                aria-label="上一张"
+                disabled={templatePreviewIndex <= 0}
+                onClick={() =>
+                  setTemplatePreviewIndex((i) => (i === null ? i : Math.max(0, i - 1)))
+                }
+              >
+                ‹
               </button>
-              <button className="btn primary" type="button" onClick={() => confirmUseTemplateAndNext()}>
-                使用模板
+              <div className="template-preview-image-wrap">
+                <img
+                  src={activeCat.templates[templatePreviewIndex]?.path}
+                  alt=""
+                  decoding="async"
+                />
+              </div>
+              <button
+                type="button"
+                className="template-preview-nav"
+                aria-label="下一张"
+                disabled={templatePreviewIndex >= activeCat.templates.length - 1}
+                onClick={() =>
+                  setTemplatePreviewIndex((i) =>
+                    i === null ? i : Math.min(activeCat.templates.length - 1, i + 1),
+                  )
+                }
+              >
+                ›
               </button>
             </div>
-            <p className="hint template-preview-keys">提示：可用键盘 ↑ ↓ 或 ← → 切换。</p>
+            <footer className="template-preview-footer">
+              <p className="template-preview-filename">
+                {activeCat.templates[templatePreviewIndex]?.file}
+              </p>
+              <div className="template-preview-footer-actions">
+                <button
+                  className="btn ghost template-preview-footer-cancel"
+                  type="button"
+                  onClick={() => closeTemplatePreview()}
+                >
+                  取消
+                </button>
+                <button className="btn primary" type="button" onClick={() => confirmUseTemplateAndNext()}>
+                  使用模板
+                </button>
+              </div>
+              <p className="template-preview-keys">提示：可用键盘 ← → 切换。</p>
+            </footer>
           </div>
         </div>
       ) : null}
@@ -549,7 +800,11 @@ export function App() {
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setModifyOpen(false)}>
           <div className="modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
             <h3>描述你要修改的内容</h3>
-            <p className="hint">用自然语言说明「把什么改成什么」或希望调整的区域与风格。</p>
+            <p className="hint">
+              {activeFeature === "dish"
+                ? "说明希望如何微调光影、背景、色彩或质感（尽量具体）；系统将尽量保持菜品造型不变。"
+                : "用自然语言说明「把什么改成什么」或希望调整的区域与风格。"}
+            </p>
             <textarea className="textarea" value={modifyText} onChange={(e) => setModifyText(e.target.value)} />
             <div className="row" style={{ marginTop: 10 }}>
               <button className="btn ghost" type="button" disabled={loading} onClick={() => setModifyOpen(false)}>
