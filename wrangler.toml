@@ -1,6 +1,11 @@
-# 默认配置：供 `wrangler pages dev`（含 `npm run dev`）读取。
-# Wrangler 4+ 不支持 `--config` 自定义路径；且「代理 Vite」时不要写 pages_build_output_dir，否则会与目录模式冲突。
-# 生产 Worker：wrangler.deploy.toml
+# 默认配置：Cloudflare CI 执行 `npx wrangler deploy` 时只读本文件，须包含 main + [assets]。
+# 本地 `npm run dev`（wrangler pages dev --proxy vite）同样读取本文件。
 
 name = "ai-poster"
+main = "worker/entry.ts"
 compatibility_date = "2025-04-01"
+
+# 机密：ARK_API_KEY（火山方舟）；ToAPIs 另配 TOAPIS_API_KEY
+[assets]
+directory = "./dist"
+binding = "ASSETS"

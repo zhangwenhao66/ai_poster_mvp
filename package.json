@@ -12,9 +12,9 @@
     "build": "npm run prepare:templates && tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "pages:dev": "npm run build && wrangler pages dev dist --compatibility-date=2025-04-01",
-    "cf:workers-deploy": "wrangler deploy --config wrangler.deploy.toml",
-    "cf:pages-deploy": "wrangler deploy --config wrangler.deploy.toml",
-    "pages:deploy": "npm run build && wrangler deploy --config wrangler.deploy.toml"
+    "cf:workers-deploy": "wrangler deploy",
+    "cf:pages-deploy": "wrangler deploy",
+    "pages:deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "react": "^19.1.0",
