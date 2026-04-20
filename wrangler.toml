@@ -6,6 +6,14 @@ main = "worker/entry.ts"
 compatibility_date = "2025-04-01"
 
 # 机密：ARK_API_KEY（火山方舟）；ToAPIs 另配 TOAPIS_API_KEY
+#
+# ToAPIs 在 Worker 内轮询会消耗 subrequest；免费档单次默认 50，已在 worker/toapis-proxy.ts
+# 按参考图数量动态压缩轮询次数。若使用付费 Workers 且生图很慢，可取消注释并提高：
+# [limits]
+# subrequests = 400
+# cpu_ms = 180000
+# 或在控制台为 Worker 设置变量 TOAPIS_SUBREQUEST_CEILING（数字字符串，如 500）以允许更多轮询。
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

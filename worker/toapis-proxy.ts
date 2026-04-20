@@ -8,7 +8,10 @@ import { TOAPIS_ALLOWED_ASPECTS } from "./aspect-constants";
 const TOAPIS_ORIGIN = "https://toapis.com";
 const NANO_MODEL = "gemini-3.1-flash-image-preview";
 const POLL_INTERVAL_MS = 2000;
+/** 理想轮询上限；实际会按单次 Worker subrequest 预算裁剪（免费账号默认 50） */
 const POLL_MAX_ATTEMPTS = 90;
+/** 未配置 `TOAPIS_SUBREQUEST_CEILING` 时采用，须低于 Cloudflare 免费档单次 50 次 subrequest */
+const CF_SUBREQUEST_SAFE_BUDGET = 46;
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -92,6 +95,30 @@ async function ensureToapisImageUrl(apiKey: string, ref: string): Promise<string
   throw new Error("参考图格式不支持（需 data URL 或 https URL）");
 }
 
+/** 创建任务前，每条参考图预估的出站 fetch 次数（与 ensureToapisImageUrl 一致） */
+function estimateSubrequestsPerRef(ref: string): number {
+  const t = ref.trim();
+  if (t.startsWith("data:")) return 1;
+  if (t.startsWith("https://") || t.startsWith("http://")) return 2;
+  return 1;
+}
+
+function subrequestCeiling(env: { TOAPIS_SUBREQUEST_CEILING?: string }): number {
+  const s = env.TOAPIS_SUBREQUEST_CEILING?.trim();
+  if (s && /^\d+$/.test(s)) {
+    const n = Number(s);
+    return Math.min(2_000_000, Math.max(CF_SUBREQUEST_SAFE_BUDGET, n));
+  }
+  return CF_SUBREQUEST_SAFE_BUDGET;
+}
+
+function maxPollAttemptsForRefs(refs: string[], ceiling: number): number {
+  let beforePoll = 1;
+  for (const r of refs) beforePoll += estimateSubrequestsPerRef(r);
+  const room = ceiling - beforePoll;
+  return Math.max(8, Math.min(POLL_MAX_ATTEMPTS, room));
+}
+
 function extractTaskId(body: Record<string, unknown>): string | null {
   if (typeof body.id === "string" && body.id) return body.id;
   const d = body.data;
@@ -141,8 +168,8 @@ function extractImageUrlFromPollPayload(j: Record<string, unknown>): string | nu
   return null;
 }
 
-async function pollUntilImageUrl(apiKey: string, taskId: string): Promise<string> {
-  for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
+async function pollUntilImageUrl(apiKey: string, taskId: string, maxAttempts: number): Promise<string> {
+  for (let i = 0; i < maxAttempts; i++) {
     const res = await fetch(`${TOAPIS_ORIGIN}/v1/images/generations/${encodeURIComponent(taskId)}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
@@ -190,7 +217,7 @@ async function pollUntilImageUrl(apiKey: string, taskId: string): Promise<string
 
 export async function apiToapisGenerateHandler(
   request: Request,
-  env: { TOAPIS_API_KEY?: string },
+  env: { TOAPIS_API_KEY?: string; TOAPIS_SUBREQUEST_CEILING?: string },
 ): Promise<Response> {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders() });
@@ -304,8 +331,10 @@ export async function apiToapisGenerateHandler(
     return jsonResponse({ error: `ToAPIs 响应缺少任务 id：${genText.slice(0, 400)}` }, 502);
   }
 
+  const maxPolls = maxPollAttemptsForRefs(refs, subrequestCeiling(env));
+
   try {
-    const imageUrl = await pollUntilImageUrl(apiKey, taskId);
+    const imageUrl = await pollUntilImageUrl(apiKey, taskId, maxPolls);
     return jsonResponse({ data: [{ url: imageUrl }] }, 200);
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : "生成失败" }, 502);
