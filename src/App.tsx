@@ -18,7 +18,7 @@ import {
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
-/** 方舟视频生成（seedance 2.0），需在控制台开通并保证账户可用额度 */
+/** 默认视频生成模型（仅请求体使用，不在界面展示） */
 const SEEDANCE_VIDEO_MODEL = "doubao-seedance-2-0-260128";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
@@ -298,7 +298,7 @@ export function App() {
         }
         await new Promise((r) => setTimeout(r, VIDEO_POLL_MS));
       }
-      throw new Error("等待超时：可在火山方舟控制台查看该任务是否仍在运行");
+      throw new Error("等待超时：请稍后在控制台查看该任务是否仍在运行");
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
@@ -555,7 +555,7 @@ export function App() {
               ? "选模板（或智能风格）→ 上传素材 → 填写文案；成稿中的商品/门店应与素材一致"
               : activeFeature === "dish"
                 ? "盘中食物保持与原图一致（仅更清晰），背景与台面可重做，适合菜单与宣传"
-                : "上传门店/菜品参考图，选择内容方向后由火山方舟 Seedance 生成适合抖音/小红书的竖屏短视频（异步任务）"}
+                : "上传参考图，选择内容方向与平台调性，生成适合抖音或小红书发布的竖屏短视频"}
           </p>
         </div>
       </div>
@@ -874,14 +874,6 @@ export function App() {
       {activeFeature === "video" ? (
         <section className="card video-feature">
           <h2>AI 短视频（抖音 / 小红书）</h2>
-          <p className="hint">
-            使用火山方舟 <strong>Seedance 2.0</strong> 图生视频接口：请上传 1–{MAX_VIDEO_REF_FILES}{" "}
-            张<strong>菜品或门店环境</strong>参考图，选择内容方向与平台调性后点击生成。任务为异步，页面会自动轮询直至完成。
-          </p>
-          <p className="hint">
-            说明：官方要求账户余额或资源包满足开通条件；参考图<strong>勿含可识别真人正脸</strong>（seedance 2.0
-            人脸限制）。生成链接约 24h 有效，请及时下载。
-          </p>
           <div className="drop">
             <div className="row">
               <input
@@ -986,7 +978,7 @@ export function App() {
             >
               <option value="720p">720p</option>
               <option value="480p">480p</option>
-              <option value="1080p">1080p（部分模型/场景可能不支持）</option>
+              <option value="1080p">1080p（部分场景可能不适用）</option>
             </select>
           </div>
           <div className="model-picker">
@@ -1009,7 +1001,7 @@ export function App() {
               <option value="10">10</option>
               <option value="12">12</option>
               <option value="15">15</option>
-              <option value="-1">智能时长（-1，计费以实际为准）</option>
+              <option value="-1">智能时长（由系统在允许范围内自选）</option>
             </select>
           </div>
           <div className="checkbox" style={{ marginTop: 10 }}>
@@ -1021,10 +1013,6 @@ export function App() {
             />
             <label htmlFor="video-audio">生成与画面同步的声音（人声/音效/配乐）</label>
           </div>
-
-          <p className="hint" style={{ marginTop: 8 }}>
-            模型：<code>{SEEDANCE_VIDEO_MODEL}</code>
-          </p>
 
           {videoTaskHint ? <p className="hint video-task-hint">{videoTaskHint}</p> : null}
 
@@ -1078,7 +1066,6 @@ export function App() {
               下载视频（MP4）
             </button>
           </div>
-          <p className="hint">链接约 24 小时有效，请及时下载或转存到自己的对象存储。</p>
         </section>
       ) : null}
 

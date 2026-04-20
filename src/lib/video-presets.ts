@@ -62,7 +62,7 @@ export function buildVideoPrompt(input: {
     platformLine,
     bodyByDirection[input.directionId],
     "画面要求：竖屏构图安全区考虑后期加标题；运动稳定、色彩自然偏暖食欲；音画可同步生成时，人声/环境音与画面情绪一致。",
-    "合规：避免出现可识别的真实他人肖像（参考图含人脸时须遵守方舟 seedance 2.0 人脸素材规则）；避免出现未授权商标特写；禁止血腥暴力。",
+    "合规：避免出现可识别的未授权他人肖像；避免出现未授权商标特写；禁止血腥暴力。",
     extraBlock,
   ]
     .filter(Boolean)
