@@ -547,7 +547,7 @@ export function App() {
     <div className="shell">
       <div className="topbar">
         <div>
-          <h1 className="title">AI 门店视觉</h1>
+          <h1 className="title">餐饮AI工具箱</h1>
           <p className="subtitle">
             {activeFeature === "poster"
               ? "选模板（或智能风格）→ 上传素材 → 填写文案；成稿中的商品/门店应与素材一致"
