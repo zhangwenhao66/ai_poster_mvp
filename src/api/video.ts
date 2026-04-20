@@ -6,6 +6,8 @@ export type VideoCreateResponse = {
   message?: string;
 };
 
+import { redactPublicErrorMessage } from "../lib/redact-public-error";
+
 export type VideoTaskResponse = {
   id?: string;
   status?: VideoTaskStatus;
@@ -15,12 +17,19 @@ export type VideoTaskResponse = {
 };
 
 function pickErr(text: string, json: unknown): string {
+  let inner = "请求失败";
   if (json && typeof json === "object") {
-    const o = json as { error?: { message?: string }; message?: string };
-    if (o.error && typeof o.error === "object" && typeof o.error.message === "string") return o.error.message;
-    if (typeof o.message === "string" && o.message.trim()) return o.message.trim();
+    const o = json as { error?: unknown; message?: string };
+    if (typeof o.error === "string" && o.error.trim()) inner = o.error.trim();
+    else if (o.error && typeof o.error === "object" && typeof (o.error as { message?: string }).message === "string") {
+      inner = String((o.error as { message: string }).message);
+    } else if (typeof o.message === "string" && o.message.trim()) {
+      inner = o.message.trim();
+    }
+  } else if (text.trim()) {
+    inner = text.trim();
   }
-  return text.trim() || "请求失败";
+  return redactPublicErrorMessage(inner);
 }
 
 export async function createVideoTask(payload: {

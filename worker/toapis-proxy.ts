@@ -70,7 +70,7 @@ async function uploadBytes(
     data?: { url?: string };
   };
   if (!res.ok || j.success === false || !j.data?.url) {
-    throw new Error(j.message || `ToAPIs 上传失败（HTTP ${res.status}）`);
+    throw new Error(j.message || `图片上传失败（HTTP ${res.status}）`);
   }
   return j.data.url;
 }
@@ -88,11 +88,11 @@ async function ensureToapisImageUrl(apiKey: string, ref: string): Promise<string
     if (!upstream.ok) throw new Error("无法拉取参考图 URL");
     const mime = upstream.headers.get("content-type") || "image/png";
     const buf = new Uint8Array(await upstream.arrayBuffer());
-    if (buf.byteLength > 10 * 1024 * 1024) throw new Error("参考图超过 10MB（ToAPIs 上传限制）");
+    if (buf.byteLength > 10 * 1024 * 1024) throw new Error("参考图超过 10MB 单张上限");
     const ext = extFromMime(mime);
     return uploadBytes(apiKey, buf, `ref.${ext}`, mime.split(";")[0] || "image/png");
   }
-  throw new Error("参考图格式不支持（需 data URL 或 https URL）");
+  throw new Error("参考图格式不支持，请换一张图片重试");
 }
 
 /** 创建任务前，每条参考图预估的出站 fetch 次数（与 ensureToapisImageUrl 一致） */
@@ -178,7 +178,7 @@ async function pollUntilImageUrl(apiKey: string, taskId: string, maxAttempts: nu
     try {
       j = JSON.parse(text) as Record<string, unknown>;
     } catch {
-      throw new Error(`ToAPIs 轮询返回非 JSON（HTTP ${res.status}）`);
+      throw new Error(`服务返回异常（HTTP ${res.status}）`);
     }
 
     const inner =
@@ -197,7 +197,7 @@ async function pollUntilImageUrl(apiKey: string, taskId: string, maxAttempts: nu
             : {},
         );
       if (url) return url;
-      throw new Error(`ToAPIs 任务已完成但未解析到图片 URL：${text.slice(0, 500)}`);
+      throw new Error(`任务已完成但未解析到图片地址：${text.slice(0, 500)}`);
     }
 
     if (status === "failed") {
@@ -207,7 +207,7 @@ async function pollUntilImageUrl(apiKey: string, taskId: string, maxAttempts: nu
         (typeof inner.fail_reason === "string" ? inner.fail_reason : null) ||
         (typeof j.fail_reason === "string" ? j.fail_reason : null) ||
         (typeof j.message === "string" ? j.message : null);
-      throw new Error(err || "ToAPIs 生成失败");
+      throw new Error(err || "生成失败");
     }
 
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -228,26 +228,26 @@ export async function apiToapisGenerateHandler(
 
   const apiKey = env.TOAPIS_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: "Server missing TOAPIS_API_KEY binding" }, 500);
+    return jsonResponse({ error: "服务未就绪，请联系管理员" }, 500);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonResponse({ error: "Invalid JSON body" }, 400);
+    return jsonResponse({ error: "请求格式无效" }, 400);
   }
   if (!body || typeof body !== "object") {
-    return jsonResponse({ error: "Body must be a JSON object" }, 400);
+    return jsonResponse({ error: "请求体无效" }, 400);
   }
 
   const incoming = body as Record<string, unknown>;
   const prompt = incoming.prompt;
   if (typeof prompt !== "string" || !prompt.trim()) {
-    return jsonResponse({ error: "prompt is required" }, 400);
+    return jsonResponse({ error: "请填写创作说明" }, 400);
   }
   if (prompt.length > 16000) {
-    return jsonResponse({ error: "prompt too long" }, 400);
+    return jsonResponse({ error: "创作说明过长" }, 400);
   }
 
   const aspectRaw =
@@ -255,7 +255,7 @@ export async function apiToapisGenerateHandler(
       ? incoming.aspect.trim()
       : "3:4";
   if (!TOAPIS_ALLOWED_ASPECTS.has(aspectRaw)) {
-    return jsonResponse({ error: `aspect 不在允许列表内（须为两模型共用的比例之一）` }, 400);
+    return jsonResponse({ error: "画幅比例无效，请刷新页面后重选" }, 400);
   }
   const aspect = aspectRaw;
 
@@ -285,7 +285,7 @@ export async function apiToapisGenerateHandler(
   }
 
   if (uploaded.length > 14) {
-    return jsonResponse({ error: "Too many reference images (max 14)" }, 400);
+    return jsonResponse({ error: "参考图过多（最多 14 张）" }, 400);
   }
 
   const genBody: Record<string, unknown> = {
@@ -313,7 +313,7 @@ export async function apiToapisGenerateHandler(
   try {
     genJson = JSON.parse(genText) as Record<string, unknown>;
   } catch {
-    return jsonResponse({ error: `ToAPIs 创建任务返回非 JSON：${genText.slice(0, 200)}` }, 502);
+    return jsonResponse({ error: `创建任务返回异常：${genText.slice(0, 200)}` }, 502);
   }
 
   if (!genRes.ok) {
@@ -323,12 +323,12 @@ export async function apiToapisGenerateHandler(
         ? String((genJson.error as { message?: string }).message || "")
         : "") ||
       genText.slice(0, 300);
-    return jsonResponse({ error: msg || `ToAPIs 创建任务失败（HTTP ${genRes.status}）` }, 502);
+    return jsonResponse({ error: msg || `创建任务失败（HTTP ${genRes.status}）` }, 502);
   }
 
   const taskId = extractTaskId(genJson);
   if (!taskId) {
-    return jsonResponse({ error: `ToAPIs 响应缺少任务 id：${genText.slice(0, 400)}` }, 502);
+    return jsonResponse({ error: `响应缺少任务编号：${genText.slice(0, 400)}` }, 502);
   }
 
   const maxPolls = maxPollAttemptsForRefs(refs, subrequestCeiling(env));

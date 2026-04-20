@@ -18,7 +18,7 @@ import {
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
-/** 默认视频生成模型（仅请求体使用，不在界面展示） */
+/** 视频任务默认 model id，仅请求体使用 */
 const SEEDANCE_VIDEO_MODEL = "doubao-seedance-2-0-260128";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
@@ -29,7 +29,6 @@ const VIDEO_MAX_POLLS = 150;
 
 type WizardStep = 1 | 2 | 3;
 type FeatureTab = "poster" | "dish" | "video";
-/** 模型1：火山 Seedream；模型2：ToAPIs 图生图 */
 type ImageModelId = "seedream" | "nano";
 
 function uid(): string {
@@ -74,7 +73,6 @@ export function App() {
   const [videoTaskHint, setVideoTaskHint] = useState("");
 
   const [imageModel, setImageModel] = useState<ImageModelId>("seedream");
-  /** 两模型共用的画幅比例；模型1 传对应 WxH，模型2 传比例 + 2K */
   const [imageAspect, setImageAspect] = useState<SharedAspectRatio>(DEFAULT_ASPECT_RATIO);
   /** 当前结果图是用哪条链路生成的，修改时必须一致 */
   const [lastGenerateModel, setLastGenerateModel] = useState<ImageModelId | null>(null);
@@ -98,7 +96,7 @@ export function App() {
         setActiveCategory(first);
         setIndexError(null);
       } catch {
-        if (!cancelled) setIndexError("模板索引加载失败：请确认已执行 npm run prepare:templates 并完成构建。");
+        if (!cancelled) setIndexError("版式素材加载失败，请刷新页面或稍后重试。");
       }
     })();
     return () => {
@@ -274,7 +272,7 @@ export function App() {
         watermark: false,
       });
       const taskId = created.id;
-      if (!taskId) throw new Error("接口未返回任务 ID");
+      if (!taskId) throw new Error("未返回任务编号");
 
       for (let i = 0; i < VIDEO_MAX_POLLS; i++) {
         setVideoTaskHint(
@@ -323,7 +321,7 @@ export function App() {
           image,
         });
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
         setLastGenerateModel("nano");
       } else {
@@ -340,7 +338,7 @@ export function App() {
         };
         const resp = await callArkGenerate(body);
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
         setLastGenerateModel("seedream");
       }
@@ -447,7 +445,7 @@ export function App() {
                 : imageArr,
         });
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
         setLastGenerateModel("nano");
       } else {
@@ -465,7 +463,7 @@ export function App() {
 
         const resp = await callArkGenerate(body);
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
         setLastGenerateModel("seedream");
       }
@@ -499,7 +497,7 @@ export function App() {
           image: resultUrl,
         });
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
       } else {
         const resp = await callArkGenerate({
@@ -514,7 +512,7 @@ export function App() {
           watermark: false,
         });
         const url = firstImageUrl(resp);
-        if (!url) throw new Error("接口未返回图片 URL");
+        if (!url) throw new Error("未返回图片地址");
         setResultUrl(url);
       }
       setModifyCount((c) => c + 1);
@@ -634,17 +632,13 @@ export function App() {
               checked={smartStyle}
               onChange={(e) => onToggleSmartStyle(e.target.checked)}
             />
-            <label htmlFor="smart">不使用模板：智能风格（由模型结合素材自动定调）</label>
+            <label htmlFor="smart">不使用模板：智能风格（由系统自动结合素材定调）</label>
           </div>
 
           {!smartStyle ? (
             <>
               {categories.length === 0 ? (
-                <p className="hint">
-                  当前没有可用模板：请在本机执行{" "}
-                  <code>npm run prepare:templates</code>（默认从 <code>../../海报模板/餐饮</code>{" "}
-                  复制），然后重新构建。
-                </p>
+                <p className="hint">当前没有可用版式素材，请稍后重试或联系管理员。</p>
               ) : (
                 <>
                   <div className="tabs" role="tablist" aria-label="模板分类">
@@ -742,10 +736,12 @@ export function App() {
             onChange={(e) => setPosterCopy(e.target.value)}
             placeholder="例如：店名、卖点一句话、活动信息、地址电话（可选）、营业时间等。"
           />
-          <p className="hint">建议控制在较短篇幅内，模型对过长 prompt 可能会忽略细节。系统已强调素材保真：若成稿与实物仍有偏差，可尝试换更清晰的素材或减少一张图里的主体数量。</p>
+          <p className="hint">
+            建议文案不要太长，过长时部分细节可能被弱化。若成稿与实物仍有偏差，可换更清晰的素材或减少单张图中的主体数量。
+          </p>
           <div className="model-picker">
             <label className="model-picker-label" htmlFor="image-model-poster">
-              生成模型
+              制图方案
             </label>
             <select
               id="image-model-poster"
@@ -753,8 +749,8 @@ export function App() {
               value={imageModel}
               onChange={(e) => setImageModel(e.target.value as ImageModelId)}
             >
-              <option value="seedream">模型1</option>
-              <option value="nano">模型2</option>
+              <option value="seedream">方案一</option>
+              <option value="nano">方案二</option>
             </select>
           </div>
           <div className="model-picker">
@@ -769,14 +765,11 @@ export function App() {
             >
               {IMAGE_ASPECT_OPTIONS.map((o) => (
                 <option key={o.ratio} value={o.ratio}>
-                  {o.label}（模型1 {o.seedreamSize}）
+                  {o.label}
                 </option>
               ))}
             </select>
           </div>
-          <p className="hint" style={{ marginTop: 6 }}>
-            选项为两模型均支持的比例交集；模型1 按上列像素出图，模型2 为同比例 + 2K。
-          </p>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn ghost" type="button" onClick={() => setWizardStep(2)}>
               上一步
@@ -826,7 +819,7 @@ export function App() {
           </div>
           <div className="model-picker">
             <label className="model-picker-label" htmlFor="image-model-dish">
-              生成模型
+              制图方案
             </label>
             <select
               id="image-model-dish"
@@ -834,8 +827,8 @@ export function App() {
               value={imageModel}
               onChange={(e) => setImageModel(e.target.value as ImageModelId)}
             >
-              <option value="seedream">模型1</option>
-              <option value="nano">模型2</option>
+              <option value="seedream">方案一</option>
+              <option value="nano">方案二</option>
             </select>
           </div>
           <div className="model-picker">
@@ -850,14 +843,11 @@ export function App() {
             >
               {IMAGE_ASPECT_OPTIONS.map((o) => (
                 <option key={o.ratio} value={o.ratio}>
-                  {o.label}（模型1 {o.seedreamSize}）
+                  {o.label}
                 </option>
               ))}
             </select>
           </div>
-          <p className="hint" style={{ marginTop: 6 }}>
-            选项为两模型均支持的比例交集；模型1 按上列像素出图，模型2 为同比例 + 2K。
-          </p>
           <div className="row" style={{ marginTop: 14 }}>
             <button
               className="btn primary"
@@ -1050,9 +1040,13 @@ export function App() {
           {remainingMods <= 0 ? (
             <p className="hint">已达到最多 {MAX_MODIFICATIONS} 次修改上限；仍可下载当前图片。</p>
           ) : activeFeature === "dish" ? (
-            <p className="hint">修改会以「当前菜品图 + 你的文字说明」再次调用生图；可描述背景、台面、光影；盘中食物仅会更清晰，不应被要求改成别的菜。</p>
+            <p className="hint">
+              将根据「当前菜品图 + 你的文字说明」再生成一版；可描述背景、台面、光影；盘中食物仅会更清晰，勿要求改成别的菜。
+            </p>
           ) : (
-            <p className="hint">修改会以「当前海报图 + 你的文字编辑指令」再次调用生图；请尽量描述版式、字色、装饰或氛围，避免要求「换成另一道菜/另一家店」（系统会保持与用户素材一致的商品与门店）。</p>
+            <p className="hint">
+              将根据「当前海报图 + 你的文字说明」再生成一版；请尽量描述版式、字色、装饰或氛围，避免要求「换成另一道菜/另一家店」（系统会尽量保持与用户素材一致的商品与门店）。
+            </p>
           )}
         </section>
       ) : null}

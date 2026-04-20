@@ -79,14 +79,14 @@ async function forwardToArk(apiKey: string, jsonBody: string): Promise<Response>
   const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
   const hint =
     isTransientNetError(detail) || detail.includes("Network")
-      ? "本地 wrangler 出站不稳定（代理/安全软件/生图耗时长导致读响应中断）较常见。可尝试：关闭系统代理；设置 NO_PROXY；换手机热点；或由边缘网络访问方舟。"
+      ? "网络不稳定或中断较常见，可稍后重试，或检查本机代理与网络设置。"
       : "";
   return jsonResponse(
     {
       error: {
         type: "upstream_failed",
         code: "UpstreamNetworkError",
-        message: `调用火山方舟失败（${detail}）。${hint}`,
+        message: `制图服务暂时不可用（${detail}）。${hint}`,
       },
     },
     502,
@@ -96,32 +96,32 @@ async function forwardToArk(apiKey: string, jsonBody: string): Promise<Response>
 async function handlePost(request: Request, env: { ARK_API_KEY: string }): Promise<Response> {
   const apiKey = env.ARK_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: "Server missing ARK_API_KEY binding" }, 500);
+    return jsonResponse({ error: "服务未就绪，请联系管理员" }, 500);
   }
 
   const len = Number(request.headers.get("content-length") || "0");
   if (len > MAX_BODY_BYTES) {
-    return jsonResponse({ error: "Request body too large" }, 413);
+    return jsonResponse({ error: "请求内容过大" }, 413);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonResponse({ error: "Invalid JSON body" }, 400);
+    return jsonResponse({ error: "请求格式无效" }, 400);
   }
 
   if (!body || typeof body !== "object") {
-    return jsonResponse({ error: "Body must be a JSON object" }, 400);
+    return jsonResponse({ error: "请求体无效" }, 400);
   }
 
   const incoming = body as Record<string, unknown>;
   const prompt = incoming.prompt;
   if (typeof prompt !== "string" || !prompt.trim()) {
-    return jsonResponse({ error: "prompt is required" }, 400);
+    return jsonResponse({ error: "请填写创作说明" }, 400);
   }
   if (prompt.length > 8000) {
-    return jsonResponse({ error: "prompt too long" }, 400);
+    return jsonResponse({ error: "创作说明过长" }, 400);
   }
 
   const model =
@@ -136,14 +136,11 @@ async function handlePost(request: Request, env: { ARK_API_KEY: string }): Promi
       sizeStr = s;
     } else if (/^\d+x\d+$/.test(s)) {
       if (!SEEDREAM_ALLOWED_SIZES.has(s)) {
-        return jsonResponse(
-          { error: `size 不在允许列表内（须为 2k/3k 或与前端一致的 WxH，如 2592x3456）` },
-          400,
-        );
+        return jsonResponse({ error: "成图尺寸参数无效，请刷新页面后重试" }, 400);
       }
       sizeStr = s;
     } else {
-      return jsonResponse({ error: "size 格式无效（须为 2k、3k 或 WxH 像素）" }, 400);
+      return jsonResponse({ error: "成图尺寸格式无效，请刷新页面后重试" }, 400);
     }
   } else {
     sizeStr = "3k";
@@ -171,11 +168,11 @@ async function handlePost(request: Request, env: { ARK_API_KEY: string }): Promi
     } else if (Array.isArray(incoming.image)) {
       const imgs = incoming.image.filter((x): x is string => typeof x === "string");
       if (imgs.length > 14) {
-        return jsonResponse({ error: "Too many reference images (max 14)" }, 400);
+        return jsonResponse({ error: "参考图过多（最多 14 张）" }, 400);
       }
       payload.image = imgs;
     } else {
-      return jsonResponse({ error: "image must be string or string[]" }, 400);
+      return jsonResponse({ error: "参考图格式无效" }, 400);
     }
   }
 

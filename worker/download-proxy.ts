@@ -81,28 +81,28 @@ export async function downloadImageProxyHandler(request: Request): Promise<Respo
   }
 
   if (request.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "请求方法不允许" }, 405);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonResponse({ error: "Invalid JSON body" }, 400);
+    return jsonResponse({ error: "请求格式无效" }, 400);
   }
 
   if (!body || typeof body !== "object") {
-    return jsonResponse({ error: "Body must be a JSON object" }, 400);
+    return jsonResponse({ error: "请求体无效" }, 400);
   }
 
   const o = body as Record<string, unknown>;
   const url = o.url;
   if (typeof url !== "string" || !url.trim()) {
-    return jsonResponse({ error: "url is required" }, 400);
+    return jsonResponse({ error: "缺少下载地址" }, 400);
   }
 
   if (!isAllowedRemoteImageUrl(url)) {
-    return jsonResponse({ error: "URL host is not allowed for download proxy" }, 403);
+    return jsonResponse({ error: "该地址不允许下载" }, 403);
   }
 
   const filename =
@@ -114,14 +114,14 @@ export async function downloadImageProxyHandler(request: Request): Promise<Respo
   });
 
   if (!upstream.ok) {
-    return jsonResponse({ error: `Upstream image fetch failed (${upstream.status})` }, 502);
+    return jsonResponse({ error: `文件拉取失败（${upstream.status}）` }, 502);
   }
 
   const ct = upstream.headers.get("content-type") || "application/octet-stream";
   const okMedia =
     ct.startsWith("image/") || ct.startsWith("video/") || ct.startsWith("application/octet-stream");
   if (!okMedia) {
-    return jsonResponse({ error: "Upstream response is not an image or video" }, 502);
+    return jsonResponse({ error: "返回内容不是可下载的图片或视频" }, 502);
   }
 
   const headers = new Headers();

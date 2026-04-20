@@ -1,6 +1,5 @@
 /**
- * 两路生图共用的宽高比：取模型1（Seedream）明确像素与模型2（ToAPIs）比例说明的交集。
- * 模型1：各比例对应下方 seedreamSize；模型2：接受同比例符串 + resolution。
+ * 两路制图共用的画幅比例；各比例对应 `seedreamSize`（像素 WxH）供默认制图通道使用。
  * 与 `worker/aspect-constants.ts` 须同步维护（Worker 不能引用本文件）。
  */
 export const IMAGE_ASPECT_OPTIONS = [

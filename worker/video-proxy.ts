@@ -9,6 +9,20 @@ const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 const DEFAULT_VIDEO_MODEL = "doubao-seedance-2-0-260128";
 
+/** 上游错误信息里常含模型名或域名，回传给前端前做脱敏 */
+function redactUpstreamMessage(raw: string): string {
+  const s = raw
+    .replace(/\bdoubao-[a-z0-9-]+\b/gi, "")
+    .replace(/\bgemini-[a-z0-9.-]+\b/gi, "")
+    .replace(/\b[a-z0-9.-]+\.volces\.com\b/gi, "")
+    .replace(/\b[a-z0-9.-]+\.volcengine\.com\b/gi, "")
+    .replace(/\btoapis\.com\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[，,.\s]+|[，,.\s]+$/g, "")
+    .trim();
+  return s.length > 0 ? s.slice(0, 500) : "请求失败，请稍后重试";
+}
+
 const ALLOWED_RATIOS = new Set(["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"]);
 const ALLOWED_RES = new Set(["480p", "720p", "1080p"]);
 
@@ -55,53 +69,53 @@ export async function apiVideoCreateHandler(
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
   if (request.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "请求方法不允许" }, 405);
   }
 
   const apiKey = env.ARK_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: "Server missing ARK_API_KEY binding" }, 500);
+    return jsonResponse({ error: "服务未就绪，请联系管理员" }, 500);
   }
 
   const len = Number(request.headers.get("content-length") || "0");
   if (len > MAX_BODY_BYTES) {
-    return jsonResponse({ error: "Request body too large" }, 413);
+    return jsonResponse({ error: "请求内容过大" }, 413);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonResponse({ error: "Invalid JSON body" }, 400);
+    return jsonResponse({ error: "请求格式无效" }, 400);
   }
   if (!body || typeof body !== "object") {
-    return jsonResponse({ error: "Body must be a JSON object" }, 400);
+    return jsonResponse({ error: "请求体无效" }, 400);
   }
 
   const incoming = body as Record<string, unknown>;
   const prompt = incoming.prompt;
   if (typeof prompt !== "string" || !prompt.trim()) {
-    return jsonResponse({ error: "prompt is required" }, 400);
+    return jsonResponse({ error: "请填写创作说明" }, 400);
   }
   if (prompt.length > 16000) {
-    return jsonResponse({ error: "prompt too long" }, 400);
+    return jsonResponse({ error: "创作说明过长" }, 400);
   }
 
   const images = incoming.images;
   if (!Array.isArray(images) || images.length === 0) {
-    return jsonResponse({ error: "images must be a non-empty string array (data URLs or https URLs)" }, 400);
+    return jsonResponse({ error: "请至少上传一张参考图" }, 400);
   }
   if (images.length > 8) {
-    return jsonResponse({ error: "Too many images (max 8)" }, 400);
+    return jsonResponse({ error: "参考图过多（最多 8 张）" }, 400);
   }
   const imageUrls: string[] = [];
   for (const x of images) {
     if (typeof x !== "string" || !x.trim()) {
-      return jsonResponse({ error: "Each image must be a non-empty string" }, 400);
+      return jsonResponse({ error: "参考图内容无效" }, 400);
     }
     const u = x.trim();
     if (!u.startsWith("data:") && !u.startsWith("https://") && !u.startsWith("http://")) {
-      return jsonResponse({ error: "Each image must be a data URL or http(s) URL" }, 400);
+      return jsonResponse({ error: "参考图格式不支持" }, 400);
     }
     imageUrls.push(u);
   }
@@ -113,12 +127,12 @@ export async function apiVideoCreateHandler(
 
   const ratioRaw = typeof incoming.ratio === "string" ? incoming.ratio.trim() : "9:16";
   if (!ALLOWED_RATIOS.has(ratioRaw)) {
-    return jsonResponse({ error: "Invalid ratio" }, 400);
+    return jsonResponse({ error: "画幅比例无效" }, 400);
   }
 
   const resolutionRaw = typeof incoming.resolution === "string" ? incoming.resolution.trim() : "720p";
   if (!ALLOWED_RES.has(resolutionRaw)) {
-    return jsonResponse({ error: "Invalid resolution" }, 400);
+    return jsonResponse({ error: "分辨率无效" }, 400);
   }
 
   let duration: number;
@@ -130,7 +144,7 @@ export async function apiVideoCreateHandler(
     duration = 6;
   }
   if (duration !== -1 && (duration < 4 || duration > 15)) {
-    return jsonResponse({ error: "duration must be -1 or integer in [4, 15]" }, 400);
+    return jsonResponse({ error: "时长参数无效" }, 400);
   }
 
   const generateAudio = typeof incoming.generate_audio === "boolean" ? incoming.generate_audio : true;
@@ -169,7 +183,10 @@ export async function apiVideoCreateHandler(
   try {
     json = JSON.parse(text);
   } catch {
-    return jsonResponse({ error: text.slice(0, 400) || "Upstream non-JSON" }, upstream.ok ? 502 : upstream.status);
+    return jsonResponse(
+      { error: redactUpstreamMessage(text.slice(0, 400) || "服务返回异常") },
+      upstream.ok ? 502 : upstream.status,
+    );
   }
 
   if (!upstream.ok) {
@@ -178,7 +195,10 @@ export async function apiVideoCreateHandler(
         ? (json as { error?: { message?: string }; message?: string }).error?.message ||
           (json as { message?: string }).message
         : null;
-    return jsonResponse({ error: err || text.slice(0, 400) }, upstream.status >= 400 ? upstream.status : 502);
+    return jsonResponse(
+      { error: redactUpstreamMessage(String(err || text.slice(0, 400))) },
+      upstream.status >= 400 ? upstream.status : 502,
+    );
   }
 
   return new Response(text, {
@@ -195,18 +215,18 @@ export async function apiVideoTaskHandler(
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
   if (request.method !== "GET") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "请求方法不允许" }, 405);
   }
 
   const apiKey = env.ARK_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: "Server missing ARK_API_KEY binding" }, 500);
+    return jsonResponse({ error: "服务未就绪，请联系管理员" }, 500);
   }
 
   const url = new URL(request.url);
   const id = url.searchParams.get("id")?.trim();
   if (!id) {
-    return jsonResponse({ error: "Query id is required" }, 400);
+    return jsonResponse({ error: "缺少任务编号" }, 400);
   }
 
   const taskUrl = `https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${encodeURIComponent(id)}`;
@@ -221,7 +241,7 @@ export async function apiVideoTaskHandler(
     } catch {
       /* keep */
     }
-    return jsonResponse({ error: msg }, upstream.status >= 400 ? upstream.status : 502);
+    return jsonResponse({ error: redactUpstreamMessage(msg) }, upstream.status >= 400 ? upstream.status : 502);
   }
 
   return new Response(text, {

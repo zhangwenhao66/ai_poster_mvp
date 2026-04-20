@@ -1,23 +1,30 @@
+import { redactPublicErrorMessage } from "../lib/redact-public-error";
+
 export type ArkGenerateResponse = {
   data?: Array<{ url?: string; b64_json?: string; size?: string }>;
   error?: { message?: string; code?: string; type?: string };
 };
 
 function pickErrorMessage(text: string, json: unknown): string {
+  let inner: string | null = null;
   if (json && typeof json === "object") {
     const root = json as { error?: unknown; message?: string };
-    if (typeof root.error === "string" && root.error.trim()) return root.error.trim();
-    if (root.error && typeof root.error === "object") {
+    if (typeof root.error === "string" && root.error.trim()) inner = root.error.trim();
+    else if (root.error && typeof root.error === "object") {
       const msg = (root.error as { message?: string }).message;
-      if (typeof msg === "string" && msg.trim()) return msg.trim();
+      if (typeof msg === "string" && msg.trim()) inner = msg.trim();
     }
-    if (typeof root.message === "string" && root.message.trim()) return root.message.trim();
+    if (!inner && typeof root.message === "string" && root.message.trim()) inner = root.message.trim();
   }
-  const trimmed = text.trim();
-  if (trimmed.startsWith("<!DOCTYPE") || trimmed.includes("<html")) {
-    return "服务端返回了非 JSON 页面（常见于本地 Functions 崩溃）。请查看终端 wrangler 日志，或检查网络/代理设置。";
+  if (!inner) {
+    const trimmed = text.trim();
+    if (trimmed.startsWith("<!DOCTYPE") || trimmed.includes("<html")) {
+      inner = "服务暂时不可用，请稍后重试或检查网络设置。";
+    } else {
+      inner = trimmed || "生成失败";
+    }
   }
-  return trimmed || "生成失败";
+  return redactPublicErrorMessage(inner);
 }
 
 async function parseGenerateResponse(res: Response): Promise<ArkGenerateResponse> {
@@ -45,7 +52,7 @@ export async function callArkGenerate(payload: Record<string, unknown>): Promise
   return parseGenerateResponse(res);
 }
 
-/** ToAPIs Nano banana 2（gemini-3.1-flash-image-preview），异步任务由 Worker 轮询完成后返回与方舟一致的 data[0].url */
+/** 备选制图通道（异步任务，完成后返回图片地址） */
 export async function callToapisGenerate(payload: {
   prompt: string;
   aspect?: string;
