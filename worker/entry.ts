@@ -1,6 +1,7 @@
 import { apiGenerateHandler } from "./ark-proxy";
 import { downloadImageProxyHandler } from "./download-proxy";
 import { apiToapisGenerateHandler } from "./toapis-proxy";
+import { apiVideoCreateHandler, apiVideoTaskHandler } from "./video-proxy";
 
 export interface Env {
   ARK_API_KEY: string;
@@ -20,6 +21,12 @@ export default {
     }
     if (url.pathname === "/api/download-image") {
       return downloadImageProxyHandler(request);
+    }
+    if (url.pathname === "/api/video/create") {
+      return apiVideoCreateHandler(request, env);
+    }
+    if (url.pathname === "/api/video/task") {
+      return apiVideoTaskHandler(request, env);
     }
     return env.ASSETS.fetch(request);
   },

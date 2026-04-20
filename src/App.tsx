@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { callArkGenerate, callToapisGenerate, firstImageUrl } from "./api/ark";
-import { downloadImage, fetchUrlAsDataUrl, fileToDataUrl } from "./lib/images";
+import { createVideoTask, getVideoTask } from "./api/video";
+import { downloadImage, downloadVideo, fetchUrlAsDataUrl, fileToDataUrl } from "./lib/images";
 import {
   DEFAULT_ASPECT_RATIO,
   IMAGE_ASPECT_OPTIONS,
@@ -8,15 +9,26 @@ import {
   type SharedAspectRatio,
 } from "./lib/image-aspect";
 import { buildDishPhotoPrompt, buildInitialPrompt, buildModifyPrompt } from "./lib/prompts";
+import {
+  buildVideoPrompt,
+  VIDEO_DIRECTIONS,
+  type ShortVideoPlatform,
+  type VideoDirectionId,
+} from "./lib/video-presets";
 import type { TemplateCategory, TemplateIndex, TemplateItem } from "./types/templates";
 
 const MODEL = "doubao-seedream-5-0-260128";
+/** 方舟视频生成（seedance 2.0），需在控制台开通并保证账户可用额度 */
+const SEEDANCE_VIDEO_MODEL = "doubao-seedance-2-0-260128";
 const MAX_MODIFICATIONS = 5;
 const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 8;
+const MAX_VIDEO_REF_FILES = 6;
+const VIDEO_POLL_MS = 4000;
+const VIDEO_MAX_POLLS = 150;
 
 type WizardStep = 1 | 2 | 3;
-type FeatureTab = "poster" | "dish";
+type FeatureTab = "poster" | "dish" | "video";
 /** 模型1：火山 Seedream；模型2：ToAPIs 图生图 */
 type ImageModelId = "seedream" | "nano";
 
@@ -50,6 +62,17 @@ export function App() {
   const [activeFeature, setActiveFeature] = useState<FeatureTab>("poster");
   const [dishUpload, setDishUpload] = useState<{ file: File; previewUrl: string } | null>(null);
 
+  const [videoUploads, setVideoUploads] = useState<Array<{ id: string; file: File; previewUrl: string }>>([]);
+  const [videoDirection, setVideoDirection] = useState<VideoDirectionId>(VIDEO_DIRECTIONS[0].id);
+  const [videoPlatform, setVideoPlatform] = useState<ShortVideoPlatform>("douyin");
+  const [videoExtra, setVideoExtra] = useState("");
+  const [videoRatio, setVideoRatio] = useState("9:16");
+  const [videoResolution, setVideoResolution] = useState("720p");
+  const [videoDuration, setVideoDuration] = useState(6);
+  const [videoGenerateAudio, setVideoGenerateAudio] = useState(true);
+  const [videoResultUrl, setVideoResultUrl] = useState<string | null>(null);
+  const [videoTaskHint, setVideoTaskHint] = useState("");
+
   const [imageModel, setImageModel] = useState<ImageModelId>("seedream");
   /** 两模型共用的画幅比例；模型1 传对应 WxH，模型2 传比例 + 2K */
   const [imageAspect, setImageAspect] = useState<SharedAspectRatio>(DEFAULT_ASPECT_RATIO);
@@ -60,6 +83,8 @@ export function App() {
   uploadsRef.current = uploads;
   const dishUploadRef = useRef(dishUpload);
   dishUploadRef.current = dishUpload;
+  const videoUploadsRef = useRef(videoUploads);
+  videoUploadsRef.current = videoUploads;
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +116,12 @@ export function App() {
     return () => {
       const d = dishUploadRef.current;
       if (d?.previewUrl) URL.revokeObjectURL(d.previewUrl);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      for (const u of videoUploadsRef.current) URL.revokeObjectURL(u.previewUrl);
     };
   }, []);
 
@@ -150,10 +181,18 @@ export function App() {
     setActiveFeature(next);
     setError(null);
     setResultUrl(null);
+    setVideoResultUrl(null);
+    setVideoTaskHint("");
     setModifyCount(0);
     setLastGenerateModel(null);
     setModifyOpen(false);
     setModifyText("");
+    if (next !== "video") {
+      setVideoUploads((prev) => {
+        for (const u of prev) URL.revokeObjectURL(u.previewUrl);
+        return [];
+      });
+    }
   }
 
   function onDishFile(fileList: FileList | null) {
@@ -179,6 +218,93 @@ export function App() {
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return null;
     });
+  }
+
+  async function onVideoAddFiles(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    setError(null);
+    const next: Array<{ id: string; file: File; previewUrl: string }> = [];
+    for (const file of Array.from(fileList)) {
+      if (!file.type.startsWith("image/")) {
+        setError("仅支持上传图片文件。");
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError(`单张图片过大（>${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB），请压缩后再试。`);
+        continue;
+      }
+      if (videoUploads.length + next.length >= MAX_VIDEO_REF_FILES) {
+        setError(`最多上传 ${MAX_VIDEO_REF_FILES} 张参考图。`);
+        break;
+      }
+      next.push({ id: uid(), file, previewUrl: URL.createObjectURL(file) });
+    }
+    if (next.length) setVideoUploads((prev) => [...prev, ...next]);
+  }
+
+  function removeVideoUpload(id: string) {
+    setVideoUploads((prev) => {
+      const u = prev.find((x) => x.id === id);
+      if (u) URL.revokeObjectURL(u.previewUrl);
+      return prev.filter((x) => x.id !== id);
+    });
+  }
+
+  async function handleVideoGenerate() {
+    if (videoUploads.length === 0) return;
+    setLoading(true);
+    setError(null);
+    setVideoResultUrl(null);
+    setVideoTaskHint("正在创建视频任务…");
+    try {
+      const images = await Promise.all(videoUploads.map((u) => fileToDataUrl(u.file)));
+      const prompt = buildVideoPrompt({
+        directionId: videoDirection,
+        platform: videoPlatform,
+        extra: videoExtra,
+      });
+      const created = await createVideoTask({
+        prompt,
+        images,
+        model: SEEDANCE_VIDEO_MODEL,
+        ratio: videoRatio,
+        resolution: videoResolution,
+        duration: videoDuration,
+        generate_audio: videoGenerateAudio,
+        watermark: false,
+      });
+      const taskId = created.id;
+      if (!taskId) throw new Error("接口未返回任务 ID");
+
+      for (let i = 0; i < VIDEO_MAX_POLLS; i++) {
+        setVideoTaskHint(
+          i === 0 ? "任务排队 / 生成中，请稍候…" : `生成中（约 ${Math.round((i * VIDEO_POLL_MS) / 1000)} 秒）…`,
+        );
+        const task = await getVideoTask(taskId);
+        const st = (task.status || "").toLowerCase();
+        if (st === "succeeded") {
+          const url = task.content?.video_url;
+          if (!url) throw new Error("任务成功但未返回视频地址");
+          setVideoResultUrl(url);
+          setVideoTaskHint("");
+          return;
+        }
+        if (st === "failed" || st === "cancelled" || st === "expired") {
+          const msg =
+            task.error && typeof task.error === "object" && typeof task.error.message === "string"
+              ? task.error.message
+              : String(st);
+          throw new Error(msg || "视频任务失败");
+        }
+        await new Promise((r) => setTimeout(r, VIDEO_POLL_MS));
+      }
+      throw new Error("等待超时：可在火山方舟控制台查看该任务是否仍在运行");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setLoading(false);
+      setVideoTaskHint("");
+    }
   }
 
   async function handleDishGenerate() {
@@ -402,15 +528,20 @@ export function App() {
   }
 
   async function handleDownload() {
-    if (!resultUrl) return;
     setError(null);
     try {
+      if (activeFeature === "video") {
+        if (!videoResultUrl) return;
+        await downloadVideo(videoResultUrl, `ai-short-video-${Date.now()}.mp4`);
+        return;
+      }
+      if (!resultUrl) return;
       await downloadImage(
         resultUrl,
         activeFeature === "dish" ? `ai-dish-${Date.now()}.png` : `ai-poster-${Date.now()}.png`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "下载失败：可尝试右键图片另存为");
+      setError(e instanceof Error ? e.message : "下载失败：可尝试右键另存为");
     }
   }
 
@@ -422,7 +553,9 @@ export function App() {
           <p className="subtitle">
             {activeFeature === "poster"
               ? "选模板（或智能风格）→ 上传素材 → 填写文案；成稿中的商品/门店应与素材一致"
-              : "盘中食物保持与原图一致（仅更清晰），背景与台面可重做，适合菜单与宣传"}
+              : activeFeature === "dish"
+                ? "盘中食物保持与原图一致（仅更清晰），背景与台面可重做，适合菜单与宣传"
+                : "上传门店/菜品参考图，选择内容方向后由火山方舟 Seedance 生成适合抖音/小红书的竖屏短视频（异步任务）"}
           </p>
         </div>
       </div>
@@ -445,6 +578,15 @@ export function App() {
           onClick={() => switchFeature("dish")}
         >
           AI 菜品图
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeFeature === "video"}
+          className={`feature-tab ${activeFeature === "video" ? "active" : ""}`}
+          onClick={() => switchFeature("video")}
+        >
+          AI 短视频
         </button>
       </div>
 
@@ -729,13 +871,183 @@ export function App() {
         </section>
       ) : null}
 
+      {activeFeature === "video" ? (
+        <section className="card video-feature">
+          <h2>AI 短视频（抖音 / 小红书）</h2>
+          <p className="hint">
+            使用火山方舟 <strong>Seedance 2.0</strong> 图生视频接口：请上传 1–{MAX_VIDEO_REF_FILES}{" "}
+            张<strong>菜品或门店环境</strong>参考图，选择内容方向与平台调性后点击生成。任务为异步，页面会自动轮询直至完成。
+          </p>
+          <p className="hint">
+            说明：官方要求账户余额或资源包满足开通条件；参考图<strong>勿含可识别真人正脸</strong>（seedance 2.0
+            人脸限制）。生成链接约 24h 有效，请及时下载。
+          </p>
+          <div className="drop">
+            <div className="row">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => void onVideoAddFiles(e.target.files)}
+              />
+              <span className="hint">
+                1–{MAX_VIDEO_REF_FILES} 张；单张 &lt; {Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB
+              </span>
+            </div>
+            {videoUploads.length > 0 ? (
+              <div className="preview-strip">
+                {videoUploads.map((u) => (
+                  <div key={u.id} className="preview">
+                    <img src={u.previewUrl} alt="" />
+                    <button type="button" onClick={() => removeVideoUpload(u.id)} aria-label="移除">
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="hint" style={{ marginTop: 10 }}>
+                建议首张为最想突出的主体（菜品特写或门头/店内一角），其余可作为补充镜头参考。
+              </p>
+            )}
+          </div>
+
+          <fieldset className="video-directions">
+            <legend className="video-directions-legend">内容方向</legend>
+            <div className="video-direction-grid">
+              {VIDEO_DIRECTIONS.map((d) => (
+                <label key={d.id} className={`video-direction-card ${videoDirection === d.id ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="video-direction"
+                    value={d.id}
+                    checked={videoDirection === d.id}
+                    onChange={() => setVideoDirection(d.id)}
+                  />
+                  <span className="video-direction-title">{d.label}</span>
+                  <span className="video-direction-hint">{d.hint}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="video-platform">
+              平台调性
+            </label>
+            <select
+              id="video-platform"
+              className="model-picker-select"
+              value={videoPlatform}
+              onChange={(e) => setVideoPlatform(e.target.value as ShortVideoPlatform)}
+            >
+              <option value="douyin">抖音（快节奏、强钩子）</option>
+              <option value="xiaohongshu">小红书（种草、清新）</option>
+            </select>
+          </div>
+
+          <textarea
+            className="textarea"
+            style={{ marginTop: 12 }}
+            value={videoExtra}
+            onChange={(e) => setVideoExtra(e.target.value)}
+            placeholder="可选：补充店名、卖点一句话、价格或禁忌（如不要口播具体数字）"
+            rows={3}
+          />
+
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="video-ratio">
+              画幅比例
+            </label>
+            <select
+              id="video-ratio"
+              className="model-picker-select"
+              value={videoRatio}
+              onChange={(e) => setVideoRatio(e.target.value)}
+            >
+              <option value="9:16">9:16 竖屏（推荐）</option>
+              <option value="3:4">3:4</option>
+              <option value="16:9">16:9 横屏</option>
+              <option value="1:1">1:1</option>
+              <option value="4:3">4:3</option>
+              <option value="21:9">21:9 超宽</option>
+              <option value="adaptive">adaptive 自动</option>
+            </select>
+          </div>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="video-resolution">
+              分辨率
+            </label>
+            <select
+              id="video-resolution"
+              className="model-picker-select"
+              value={videoResolution}
+              onChange={(e) => setVideoResolution(e.target.value)}
+            >
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+              <option value="1080p">1080p（部分模型/场景可能不支持）</option>
+            </select>
+          </div>
+          <div className="model-picker">
+            <label className="model-picker-label" htmlFor="video-duration">
+              时长（秒）
+            </label>
+            <select
+              id="video-duration"
+              className="model-picker-select"
+              value={String(videoDuration)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setVideoDuration(v === "-1" ? -1 : Number(v));
+              }}
+            >
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+              <option value="15">15</option>
+              <option value="-1">智能时长（-1，计费以实际为准）</option>
+            </select>
+          </div>
+          <div className="checkbox" style={{ marginTop: 10 }}>
+            <input
+              id="video-audio"
+              type="checkbox"
+              checked={videoGenerateAudio}
+              onChange={(e) => setVideoGenerateAudio(e.target.checked)}
+            />
+            <label htmlFor="video-audio">生成与画面同步的声音（人声/音效/配乐）</label>
+          </div>
+
+          <p className="hint" style={{ marginTop: 8 }}>
+            模型：<code>{SEEDANCE_VIDEO_MODEL}</code>
+          </p>
+
+          {videoTaskHint ? <p className="hint video-task-hint">{videoTaskHint}</p> : null}
+
+          <div className="row" style={{ marginTop: 14 }}>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={videoUploads.length === 0 || loading}
+              onClick={() => void handleVideoGenerate()}
+            >
+              {loading ? "生成中…" : "生成短视频"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {error ? (
         <div className="card error" role="alert">
           {error}
         </div>
       ) : null}
 
-      {resultUrl ? (
+      {activeFeature !== "video" && resultUrl ? (
         <section className="card result">
           <h2>生成结果</h2>
           <img src={resultUrl} alt={activeFeature === "dish" ? "AI 菜品图" : "AI 生成海报"} />
@@ -754,6 +1066,19 @@ export function App() {
           ) : (
             <p className="hint">修改会以「当前海报图 + 你的文字编辑指令」再次调用生图；请尽量描述版式、字色、装饰或氛围，避免要求「换成另一道菜/另一家店」（系统会保持与用户素材一致的商品与门店）。</p>
           )}
+        </section>
+      ) : null}
+
+      {activeFeature === "video" && videoResultUrl ? (
+        <section className="card result">
+          <h2>生成结果</h2>
+          <video className="result-video" controls playsInline src={videoResultUrl} />
+          <div className="row">
+            <button className="btn primary" type="button" disabled={loading} onClick={() => void handleDownload()}>
+              下载视频（MP4）
+            </button>
+          </div>
+          <p className="hint">链接约 24 小时有效，请及时下载或转存到自己的对象存储。</p>
         </section>
       ) : null}
 

@@ -75,7 +75,7 @@ a {
 
 .feature-tab {
   flex: 1;
-  min-width: 140px;
+  min-width: 108px;
   margin: 0;
   padding: 12px 16px;
   border-radius: 10px;
@@ -613,4 +613,78 @@ a {
   text-align: center;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* AI 短视频 */
+.video-directions {
+  margin: 18px 0 0;
+  padding: 0;
+  border: none;
+}
+
+.video-directions-legend {
+  padding: 0;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+
+.video-direction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.video-direction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 12px 12px 36px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 253, 248, 0.85);
+  cursor: pointer;
+  position: relative;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.video-direction-card:hover {
+  border-color: rgba(196, 92, 38, 0.45);
+}
+
+.video-direction-card.selected {
+  border-color: rgba(196, 92, 38, 0.65);
+  box-shadow: 0 0 0 2px rgba(196, 92, 38, 0.12);
+}
+
+.video-direction-card input {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+}
+
+.video-direction-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.video-direction-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.result-video {
+  width: 100%;
+  max-height: min(70vh, 640px);
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.video-task-hint {
+  margin-top: 10px;
+  color: var(--accent);
+  font-weight: 500;
 }

@@ -79,3 +79,9 @@ export async function downloadImage(url: string, filename: string): Promise<void
     URL.revokeObjectURL(objectUrl);
   });
 }
+
+/** 下载视频（经同源代理，需为允许域名下的 https URL） */
+export async function downloadVideo(url: string, filename: string): Promise<void> {
+  const name = filename.endsWith(".mp4") ? filename : `${filename.replace(/\.[^.]+$/, "")}.mp4`;
+  return downloadImage(url, name);
+}

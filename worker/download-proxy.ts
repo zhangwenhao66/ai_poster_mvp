@@ -48,9 +48,16 @@ export function isAllowedRemoteImageUrl(urlString: string): boolean {
 function sanitizeFilename(name: string): string {
   const trimmed = name.trim().slice(0, 120);
   const safe = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "_");
-  return safe.endsWith(".png") || safe.endsWith(".jpg") || safe.endsWith(".jpeg") || safe.endsWith(".webp")
-    ? safe.slice(0, 100)
-    : `${(safe || "ai-poster").slice(0, 80)}.png`;
+  if (
+    safe.endsWith(".png") ||
+    safe.endsWith(".jpg") ||
+    safe.endsWith(".jpeg") ||
+    safe.endsWith(".webp") ||
+    safe.endsWith(".mp4")
+  ) {
+    return safe.slice(0, 100);
+  }
+  return `${(safe || "ai-poster").slice(0, 80)}.png`;
 }
 
 function jsonResponse(body: unknown, status = 400): Response {
@@ -110,9 +117,11 @@ export async function downloadImageProxyHandler(request: Request): Promise<Respo
     return jsonResponse({ error: `Upstream image fetch failed (${upstream.status})` }, 502);
   }
 
-  const ct = upstream.headers.get("content-type") || "image/png";
-  if (!ct.startsWith("image/") && !ct.startsWith("application/octet-stream")) {
-    return jsonResponse({ error: "Upstream response is not an image" }, 502);
+  const ct = upstream.headers.get("content-type") || "application/octet-stream";
+  const okMedia =
+    ct.startsWith("image/") || ct.startsWith("video/") || ct.startsWith("application/octet-stream");
+  if (!okMedia) {
+    return jsonResponse({ error: "Upstream response is not an image or video" }, 502);
   }
 
   const headers = new Headers();
